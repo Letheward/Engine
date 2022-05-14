@@ -1,0 +1,6 @@
+*.exe
+*.a
+bin/logs/*
+bin/data/fonts/*
+bin/data/save/*
+bin/data/bitmaps/*
