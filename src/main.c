@@ -156,10 +156,9 @@ int main(int c_arg_count, char** c_args) {
         draw_char(my_fid, &camera);
         draw_model(&object, 1, &camera);
         draw_axis_arrow((Vector3) {0.05, 0.05, 0.05}, &camera);
-        
+    
         //draw_cursor();
         //draw_circle();
-
 
         // swap buffer
         if (glfwWindowShouldClose(window_info.handle)) break;

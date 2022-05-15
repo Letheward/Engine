@@ -506,6 +506,53 @@ void draw_model(Model3D* model, int count, Camera* cam) {
 
 /* ==== Resource Loading ==== */
 
+#define make_mesh_from_stack_data(mesh, v, i, va, Vertex_Type, shader, texture) make_mesh(mesh, (f32*) v, i, va, length_of(v), length_of(i), length_of(va), sizeof(Vertex_Type), shader, texture)
+void make_mesh(
+    Mesh* mesh, 
+    f32*  vertices, 
+    u32*  indices, 
+    u32*  vertex_array_structure,
+    u32   vertex_count, 
+    u32   index_count,
+    u32   vertex_array_structure_count,
+    u64   vertex_size, 
+    u32   shader,
+    u32   texture
+) {
+
+    mesh->vertex_data       = malloc(vertex_size * vertex_count);
+    mesh->indices           = malloc(sizeof(u32) * index_count);
+    mesh->vertex_data_count = vertex_count * vertex_size / sizeof(f32);
+    mesh->index_count       = index_count;  
+    memcpy(mesh->vertex_data, vertices, vertex_size * vertex_count); 
+    memcpy(mesh->indices,     indices,  sizeof(u32) * index_count); 
+    
+    mesh->id.shader  = shader;
+    mesh->id.texture = texture;
+
+    glGenVertexArrays(1, &mesh->id.vertex_array);
+    glGenBuffers(     1, &mesh->id.vertices);
+    glGenBuffers(     1, &mesh->id.indices);
+
+    glUseProgram(mesh->id.shader);
+
+    glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
+    glBufferData(GL_ARRAY_BUFFER, mesh->vertex_data_count * sizeof(f32), mesh->vertex_data, GL_DYNAMIC_DRAW);
+
+    glBindVertexArray(mesh->id.vertex_array);
+    
+    u32 step = 0;
+    for (u32 i = 0; i < vertex_array_structure_count; i++) {
+        glVertexAttribPointer(i, vertex_array_structure[i], GL_FLOAT, GL_FALSE, vertex_size, (void*) (step * sizeof(f32)));
+        glEnableVertexAttribArray(i);
+        step += vertex_array_structure[i];
+    }
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->index_count * sizeof(u32), mesh->indices, GL_DYNAMIC_DRAW);
+}
+
+
 // todo: only handle RGBA now
 Texture load_texture(char* path, int channel) {
 
@@ -803,237 +850,119 @@ void setup(int arg_count, char** args) {
             0---------1            / |
     */
     
-    
     // Axis arrow
     {
-        Mesh* mesh = &geometry_primitives.axis_arrow; 
-        
         typedef struct {
             Vector3 pos;
             Vector3 color;
         } Vertex;
-
-        {
-            Vertex v[] = {
-                {{0, 0, 0}, {1, 1, 1}},
-                {{1, 0, 0}, {1, 0, 0}},
-                {{0, 1, 0}, {0, 1, 0}},
-                {{0, 0, 1}, {0, 0, 1}},
-            };
-
-            u32 i[] = {
-                0, 1,
-                0, 2,
-                0, 3,
-            };
-
-            mesh->vertex_data = malloc(sizeof(v));
-            mesh->indices     = malloc(sizeof(i));
-            mesh->vertex_data_count = length_of(v) * sizeof(Vertex) / sizeof(f32);
-            mesh->index_count       = length_of(i);  
-            memcpy(mesh->vertex_data, v, sizeof(v)); 
-            memcpy(mesh->indices,     i, sizeof(i)); 
-        }
-
-        mesh->id.shader  = asset_shaders.axis;
-        mesh->id.texture = 0;
         
-        glGenVertexArrays(1, &mesh->id.vertex_array);
-        glGenBuffers(     1, &mesh->id.vertices);
-        glGenBuffers(     1, &mesh->id.indices);
+        u32 va[] = {3, 3};
 
-        glUseProgram(mesh->id.shader);
+        Vertex v[] = {
+            {{0, 0, 0}, {1, 1, 1}},
+            {{1, 0, 0}, {1, 0, 0}},
+            {{0, 1, 0}, {0, 1, 0}},
+            {{0, 0, 1}, {0, 0, 1}},
+        };
 
-        glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
-        glBufferData(GL_ARRAY_BUFFER, mesh->vertex_data_count * sizeof(f32), mesh->vertex_data, GL_DYNAMIC_DRAW);
+        u32 i[] = {
+            0, 1,
+            0, 2,
+            0, 3,
+        };
 
-        glBindVertexArray(mesh->id.vertex_array);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), 0);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*) (3 * sizeof(f32)));
-        glEnableVertexAttribArray(0);
-        glEnableVertexAttribArray(1);
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->index_count * sizeof(u32), mesh->indices, GL_DYNAMIC_DRAW);
+        make_mesh_from_stack_data(&geometry_primitives.axis_arrow, v, i, va, Vertex, asset_shaders.axis, 0);
     }
 
-  
     // Rectangle
     {
-        Mesh* mesh = &geometry_primitives.rectangle;
-        
         typedef struct {
             Vector2 pos;
         } Vertex;
 
-        {
-            f32 s = 0.5; // will get a 1 * 1 rect, center at 0, 0, 0
-           
-            Vertex v[] = {
-                {{-s, -s}},
-                {{ s, -s}},
-                {{ s,  s}},
-                {{-s,  s}},
-            };
+        f32 s = 0.5; // will get a 1 * 1 rect, center at 0, 0, 0
 
-            u32 i[] = {
-                0, 1, 2,
-                0, 2, 3
-            };
+        u32 va[] = {2};
 
-            mesh->vertex_data = malloc(sizeof(v));
-            mesh->indices     = malloc(sizeof(i));
-            mesh->vertex_data_count = length_of(v) * sizeof(Vertex) / sizeof(f32);
-            mesh->index_count       = length_of(i);  
-            memcpy(mesh->vertex_data, v, sizeof(v)); 
-            memcpy(mesh->indices,     i, sizeof(i)); 
-        }
+        Vertex v[] = {
+            {{-s, -s}},
+            {{ s, -s}},
+            {{ s,  s}},
+            {{-s,  s}},
+        };
 
-        mesh->id.shader  = asset_shaders.rect;
-        mesh->id.texture = 0;
-        
-        glGenVertexArrays(1, &mesh->id.vertex_array);
-        glGenBuffers(     1, &mesh->id.vertices);
-        glGenBuffers(     1, &mesh->id.indices);
+        u32 i[] = {
+            0, 1, 2,
+            0, 2, 3
+        };
 
-        glUseProgram(mesh->id.shader);
-
-        glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
-        glBufferData(GL_ARRAY_BUFFER, mesh->vertex_data_count * sizeof(f32), mesh->vertex_data, GL_DYNAMIC_DRAW);
-
-        glBindVertexArray(mesh->id.vertex_array);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), 0);
-        glEnableVertexAttribArray(0);
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->index_count * sizeof(u32), mesh->indices, GL_DYNAMIC_DRAW);
+        make_mesh_from_stack_data(&geometry_primitives.rectangle, v, i, va, Vertex, asset_shaders.rect, 0);
     }
-
+   
     // Cube 
     {
-        Mesh* mesh = &geometry_primitives.cube;
-        
         typedef struct {
             Vector3 pos;
             struct {f32 u, v;} uv;
             struct {f32 r, g, b;} color;
         } Vertex;
 
-        {
-            f32 s = 0.5; // will get a 1 * 1 * 1 cube, center at 0, 0, 0
-            
-            Vertex v[] = {
-                {{-s, -s, -s}, {0, 0}, {1, 0, 0}}, 
-                {{ s, -s, -s}, {1, 0}, {0, 1, 0}},
-                {{ s,  s, -s}, {1, 1}, {0, 0, 1}},
-                {{-s,  s, -s}, {0, 1}, {1, 1, 1}},
-                {{-s, -s,  s}, {0, 0}, {0, 1, 1}},
-                {{ s, -s,  s}, {1, 0}, {1, 0, 1}},
-                {{ s,  s,  s}, {1, 1}, {1, 1, 0}},
-                {{-s,  s,  s}, {0, 1}, {0, 0, 0}},
-            };
-
-            u32 i[] = {
-                3, 2, 1, 3, 1, 0,
-                4, 5, 6, 4, 6, 7,
-                0, 1, 5, 0, 5, 4,
-                1, 2, 6, 1, 6, 5,
-                2, 3, 7, 2, 7, 6,
-                3, 0, 4, 3, 4, 7
-            };
-
-            mesh->vertex_data = malloc(sizeof(v));
-            mesh->indices     = malloc(sizeof(i));
-            mesh->vertex_data_count = length_of(v) * sizeof(Vertex) / sizeof(f32);
-            mesh->index_count       = length_of(i);  
-            memcpy(mesh->vertex_data, v, sizeof(v)); 
-            memcpy(mesh->indices,     i, sizeof(i)); 
-        }
-
-        mesh->id.shader  = asset_shaders.cube;
-        mesh->id.texture = asset_textures.test.id;
+        f32 s = 0.5; // will get a 1 * 1 * 1 cube, center at 0, 0, 0
         
-        glGenVertexArrays(1, &mesh->id.vertex_array);
-        glGenBuffers(     1, &mesh->id.vertices);
-        glGenBuffers(     1, &mesh->id.indices);
+        u32 va[] = {3, 2, 3};
+        
+        Vertex v[] = {
+            {{-s, -s, -s}, {0, 0}, {1, 0, 0}}, 
+            {{ s, -s, -s}, {1, 0}, {0, 1, 0}},
+            {{ s,  s, -s}, {1, 1}, {0, 0, 1}},
+            {{-s,  s, -s}, {0, 1}, {1, 1, 1}},
+            {{-s, -s,  s}, {0, 0}, {0, 1, 1}},
+            {{ s, -s,  s}, {1, 0}, {1, 0, 1}},
+            {{ s,  s,  s}, {1, 1}, {1, 1, 0}},
+            {{-s,  s,  s}, {0, 1}, {0, 0, 0}},
+        };
 
-        glUseProgram(mesh->id.shader);
+        u32 i[] = {
+            3, 2, 1, 3, 1, 0,
+            4, 5, 6, 4, 6, 7,
+            0, 1, 5, 0, 5, 4,
+            1, 2, 6, 1, 6, 5,
+            2, 3, 7, 2, 7, 6,
+            3, 0, 4, 3, 4, 7
+        };
 
-        glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
-        glBufferData(GL_ARRAY_BUFFER, mesh->vertex_data_count * sizeof(f32), mesh->vertex_data, GL_DYNAMIC_DRAW);
-
-        glBindVertexArray(mesh->id.vertex_array);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), 0);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*) (3 * sizeof(f32)));
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*) (5 * sizeof(f32)));
-        glEnableVertexAttribArray(0);
-        glEnableVertexAttribArray(1);
-        glEnableVertexAttribArray(2);
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->index_count * sizeof(u32), mesh->indices, GL_DYNAMIC_DRAW);
+        make_mesh_from_stack_data(&geometry_primitives.cube, v, i, va, Vertex, asset_shaders.cube, asset_textures.test.id);
     }
-
-    // Tetrahedron 
+    
+    // Tetrahedron
     {
-        
-        Mesh* mesh = &geometry_primitives.tetrahedron;
-        
         typedef struct {
             Vector3 pos;
             struct {f32 u, v;} uv;
             struct {f32 r, g, b;} color;
         } Vertex;
 
-        {
-            f32 sv = 0.866025; // sqrt(0.75), sqrt(size^2 + (size/2)^2) = sqrt(0.75) * size
-            f32 s = 1; 
+        f32 sv = 0.866025; // sqrt(0.75), sqrt(size^2 + (size/2)^2) = sqrt(0.75) * size
+        f32 s  = 1; 
 
-            Vertex v[] = {
-                {{-s * sv, -s * 0.5, -s * 0.75}, {1, 0}, {1, 1, 1}},
-                {{ s * sv, -s * 0.5, -s * 0.75}, {0, 1}, {1, 1, 1}},
-                {{       0,       s, -s * 0.75}, {1, 1}, {1, 1, 1}},
-                {{       0,       0,  s * 0.75}, {0, 0}, {1, 1, 1}},
-            };
-
-            u32 i[] = {
-                0, 1, 2,
-                0, 1, 3,
-                1, 2, 3,
-                2, 0, 3,
-            };
-
-            // if only we can direct fill using the same syntax...
-            mesh->vertex_data = malloc(sizeof(v));
-            mesh->indices     = malloc(sizeof(i));
-            mesh->vertex_data_count = length_of(v) * sizeof(Vertex) / sizeof(f32);
-            mesh->index_count       = length_of(i);  
-            memcpy(mesh->vertex_data, v, sizeof(v)); 
-            memcpy(mesh->indices,     i, sizeof(i)); 
-        }
-
-        mesh->id.shader  = asset_shaders.cube;
-        mesh->id.texture = asset_textures.test.id;
+        u32 va[] = {3, 2, 3};
         
-        glGenVertexArrays(1, &mesh->id.vertex_array);
-        glGenBuffers(     1, &mesh->id.vertices);
-        glGenBuffers(     1, &mesh->id.indices);
+        Vertex v[] = {
+            {{-s * sv, -s * 0.5, -s * 0.75}, {1, 0}, {1, 1, 1}},
+            {{ s * sv, -s * 0.5, -s * 0.75}, {0, 1}, {1, 1, 1}},
+            {{       0,       s, -s * 0.75}, {1, 1}, {1, 1, 1}},
+            {{       0,       0,  s * 0.75}, {0, 0}, {1, 1, 1}},
+        };
 
-        glUseProgram(mesh->id.shader);
-
-        glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
-        glBufferData(GL_ARRAY_BUFFER, mesh->vertex_data_count * sizeof(f32), mesh->vertex_data, GL_DYNAMIC_DRAW);
-
-        glBindVertexArray(mesh->id.vertex_array);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), 0);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*) (3 * sizeof(f32)));
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*) (5 * sizeof(f32)));
-        glEnableVertexAttribArray(0);
-        glEnableVertexAttribArray(1);
-        glEnableVertexAttribArray(2);
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->index_count * sizeof(u32), mesh->indices, GL_DYNAMIC_DRAW);
+        u32 i[] = {
+            0, 1, 2,
+            0, 1, 3,
+            1, 2, 3,
+            2, 0, 3,
+        };
+        
+        make_mesh_from_stack_data(&geometry_primitives.tetrahedron, v, i, va, Vertex, asset_shaders.cube, asset_textures.test.id);
     }
 }
 
