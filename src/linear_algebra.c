@@ -346,6 +346,13 @@ Matrix4 r3d_to_m4(Rotor3D r) {
 
 /* ==== lerps ==== */
 
+Vector2 lerp_v2(Vector2 a, Vector2 b, f32 t) {
+    return (Vector2) {
+        a.x + (b.x - a.x) * t,
+        a.y + (b.y - a.y) * t,
+    };
+}
+
 Vector3 lerp_v3(Vector3 a, Vector3 b, f32 t) {
     return (Vector3) {
         a.x + (b.x - a.x) * t,

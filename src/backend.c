@@ -3,7 +3,7 @@
 typedef struct {
 
     GLFWwindow* handle;
-    char title[128];
+    char* title;
 
     int width;
     int height;
@@ -27,6 +27,7 @@ typedef struct {
     u8 cursor_visible;
     u8 fullscreen;
     u8 is_first_frame;
+    u8 show_debug_info;
 
 } WindowInfo;
 
@@ -61,14 +62,21 @@ typedef struct {
 // global name binding
 
 typedef struct {
+   
     u32 cube;
-    u32 light;
     u32 rect;
     u32 axis;
+    
+    u32 font;
+    u32 light;
+
 } Asset_Shaders;
 
 typedef struct {
     Texture test;
+    Texture styxel;
+    Texture styxel_8x8;
+    Texture sb_16x16;
 } Asset_Textures;
 
 
@@ -127,7 +135,9 @@ typedef struct {
 // global name binding
 typedef struct {
     Mesh axis_arrow;
+    Mesh ring;
     Mesh rectangle;
+    Mesh font_rectangle;
     Mesh cube;
     Mesh tetrahedron;
 } GeometryPrimitives;
@@ -153,9 +163,10 @@ Asset_Textures     asset_textures;
 f32 engine_speed_scale = 1.0;
 
 WindowInfo window_info = {
-    .width  = 800,
-    .height = 600,
-    .vsync  = 1,
+    .width           = 800,
+    .height          = 600,
+    .vsync           = 1,
+    .show_debug_info = 1,
 };
 
 Camera camera = {
@@ -172,7 +183,6 @@ Camera camera = {
     .far = 10000.000000,
     .draw_mode = 4,
 };
-
 
 
 
@@ -249,25 +259,18 @@ void GL_print_debug_message(
 
 /* ==== Renderer: Utilities ==== */
 
-void fill_FPS_at_title(Timer* t, f64 dt) {
+void update_FPS_string(Timer* t, f64 dt, String* s) {
 
-    // FPS display
-    WindowInfo* w = &window_info;
- 
     t->base    += dt;
     t->counter += t->interval;
-   
+    
     if (t->base >= t->interval) {
-        
         f64 v = t->counter / t->base / t->interval;
-        snprintf(w->title, sizeof(w->title), "Engine   Frametime: %fms  FPS: %f", 1000 / v, v);
-        glfwSetWindowTitle(w->handle, w->title);
-
+        s->count   = snprintf((char*) s->data, s->count, "Frametime: %fms  FPS: %f", 1000 / v, v);
         t->base    = 0;
         t->counter = 0;
     }
 }
-
 
 void update_camera_projection(Camera* cam) {
     cam->projection = m4_perspective(cam->FOV * TAU / 360, window_info.aspect, cam->near, cam->far);
@@ -293,6 +296,12 @@ void toggle_cursor() {
     w->cursor_visible = !w->cursor_visible;
     glfwSetInputMode(w->handle, GLFW_CURSOR, w->cursor_visible ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
 }
+
+void toggle_debug_info() {
+    WindowInfo* w = &window_info;
+    w->show_debug_info = !w->show_debug_info;
+}
+
 
 // borderless fullscreen for now
 void toggle_fullscreen() {
@@ -343,35 +352,6 @@ void change_engine_speed(int d) {
     logprint("[Engine] Speed Scale: %f\n", engine_speed_scale);
 }
 
-void print_camera_data_as_code(Camera* cam) {
-    Vector3 p = cam->position;
-    Rotor3D r = cam->orientation;
-    printf(
-        "\n\n"
-        "Camera camera = {\n"
-        "    .position = {%f, %f, %f},\n"
-        "    .orientation = {%f, %f, %f, %f},\n"
-        "    .yz = %f,\n"
-        "    .zx = %f,\n"
-        "    .xy = %f,\n"
-        "    .draw_mode = %d,\n"
-        "    .FOV = %d,\n"
-        "    .near = %f,\n"
-        "    .far = %f,\n"
-        "};\n\n",
-        p.x, p.y, p.z,
-        r.s, r.yz, r.zx, r.xy,
-        cam->yz,
-        cam->zx,
-        cam->xy,
-        cam->draw_mode,
-        cam->FOV,
-        cam->near,
-        cam->far
-    );
-}
-
-
 
 
 
@@ -415,8 +395,36 @@ void draw_axis_arrow(Vector3 scale, Camera* cam) {
     glLineWidth(1);
 }
 
+// todo: how should we do offset?
+void draw_ring(Vector2 scale, Vector4 color) {
+    
+    Mesh* mesh = &geometry_primitives.ring;
 
+    Matrix2 m = m2_scale((Vector2) {1 / window_info.aspect, 1});
+    m = m2_mul(m2_scale(scale), m);
 
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA);
+
+    glUseProgram(mesh->id.shader); 
+    glBindVertexArray(mesh->id.vertex_array);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
+ 
+    glUniform4fv(glGetUniformLocation(mesh->id.shader, "color"), 1, (f32*) &color);
+
+    glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m);
+    
+    glLineWidth(2);
+    glDrawElements(GL_LINES, 60, GL_UNSIGNED_INT, NULL);
+    glLineWidth(1);
+
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+}
+
+// todo: how should we do offset?
 void draw_rect(Matrix2* m, int count, Vector4 color) {
     
     Mesh* mesh = &geometry_primitives.rectangle;
@@ -440,6 +448,54 @@ void draw_rect(Matrix2* m, int count, Vector4 color) {
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
 }
+
+// todo: texture leak bug, one more character? why does this show empty line?
+void draw_string(Vector2 position, Vector2 scale, String s) {
+    
+    Mesh* mesh = &geometry_primitives.font_rectangle;
+    
+    Matrix2 m = m2_scale((Vector2) {1 / window_info.aspect, 1});
+    m = m2_mul(m2_scale(scale), m);
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA);
+ 
+    glUseProgram(mesh->id.shader); 
+    glBindVertexArray(mesh->id.vertex_array);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
+ 
+    glBindTexture(GL_TEXTURE_2D, asset_textures.styxel.id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glActiveTexture(GL_TEXTURE0);
+ 
+    glUniform1i(glGetUniformLocation(mesh->id.shader, "texture0"), 0);
+    glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m);
+   
+    for (int i = 0; i < s.count; i++) {
+    
+        u8 c = s.data[i];
+
+        int o = 16 * 1;
+        int row = (c - o) % 16;
+        int col = 6 - (c - o) / 16;
+        
+        Vector2 offset = {row / 16.0, col / 6.0};
+        Vector2 pos_offset = {position.x + scale.x * i / window_info.aspect, position.y};
+
+        glUniform2fv(glGetUniformLocation(mesh->id.shader, "position"), 1, (f32*) &pos_offset);
+        glUniform2fv(glGetUniformLocation(mesh->id.shader, "offset"), 1, (f32*) &offset);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, NULL);
+    }
+
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+}
+
 
 // todo: off pixel looks ugly
 void draw_cursor() {
@@ -491,12 +547,6 @@ void draw_model(Model3D* model, int count, Camera* cam) {
         glDrawElements(cam->draw_mode, mesh->index_count, GL_UNSIGNED_INT, NULL);
     }
 }
-
-
-
-
-
-
 
 
 
@@ -690,8 +740,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             case GLFW_KEY_ESCAPE: glfwSetWindowShouldClose(window, 1); break;
             case GLFW_KEY_F1:     toggle_vsync(); break;
             case GLFW_KEY_F2:     toggle_cursor(); break;
+            case GLFW_KEY_F3:     toggle_debug_info(); break;
             case GLFW_KEY_F11:    toggle_fullscreen(); break;
-            case GLFW_KEY_SPACE:  print_camera_data_as_code(&camera); break;
             case GLFW_KEY_Z:      change_draw_mode(-1); break;
             case GLFW_KEY_X:      change_draw_mode(1); break;
             case GLFW_KEY_UP:     change_engine_speed(1); break;
@@ -761,6 +811,8 @@ void setup(int arg_count, char** args) {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        
+        // glfwWindowHint(GLFW_SAMPLES, 4); // anti-aliasing
 
         // set window and load OpenGL functions
         w->handle = glfwCreateWindow(w->width, w->height, "Engine", NULL, NULL);
@@ -813,7 +865,10 @@ void setup(int arg_count, char** args) {
             Asset_Textures* t = &asset_textures;
 
             stbi_set_flip_vertically_on_load(1);
-            t->test = load_texture("data/bitmaps/test.png", 4);
+            t->test       = load_texture("data/bitmaps/test.png", 4);
+            t->styxel     = load_texture("data/fonts/styxel.png", 4);
+            t->styxel_8x8 = load_texture("data/fonts/styxel_8x8.png", 4);
+            t->sb_16x16   = load_texture("data/fonts/sb_16x16.png", 4);
         }
 
         // Compile All Shaders 
@@ -823,6 +878,8 @@ void setup(int arg_count, char** args) {
             s->cube = compile_shader("data/shaders/cube.glsl");
             s->rect = compile_shader("data/shaders/rect.glsl");
             s->axis = compile_shader("data/shaders/axis.glsl");
+            s->font = compile_shader("data/shaders/font.glsl");
+
         }
 
         load_position(&camera);
@@ -874,6 +931,32 @@ void setup(int arg_count, char** args) {
 
         make_mesh_from_stack_data(&geometry_primitives.axis_arrow, v, i, va, Vertex, asset_shaders.axis, 0);
     }
+    
+    // Ring
+    {
+        typedef struct {
+            Vector2 pos;
+        } Vertex;
+        
+        u32 va[] = {2};
+
+        Vertex v[30];
+        for (int i = 0; i < 30; i++) {
+            f32 rad  = TAU * i / 30.0;
+            v[i].pos = (Vector2) {cosf(rad), sinf(rad)};
+        }
+
+        u32 i[60];
+        for (int j = 0; j < 29; j++) {
+            i[j * 2 + 0] = j;
+            i[j * 2 + 1] = j + 1;
+        }
+
+        i[58] = 29;
+        i[59] = 0;
+
+        make_mesh_from_stack_data(&geometry_primitives.ring, v, i, va, Vertex, asset_shaders.rect, 0);
+    }
 
     // Rectangle
     {
@@ -898,6 +981,32 @@ void setup(int arg_count, char** args) {
         };
 
         make_mesh_from_stack_data(&geometry_primitives.rectangle, v, i, va, Vertex, asset_shaders.rect, 0);
+    }
+    
+    // Mono Font
+    {
+        typedef struct {
+            Vector2 pos;
+            Vector2 uv;
+        } Vertex;
+
+        f32 s = 0.5; // will get a 1 * 1 rect, center at 0, 0, 0
+
+        u32 va[] = {2, 2};
+
+        Vertex v[] = {
+            {{-s, -s}, {0, 0}},
+            {{ s, -s}, {1, 0}},
+            {{ s,  s}, {1, 1}},
+            {{-s,  s}, {0, 1}},
+        };
+
+        u32 i[] = {
+            0, 1, 2,
+            0, 2, 3
+        };
+
+        make_mesh_from_stack_data(&geometry_primitives.font_rectangle, v, i, va, Vertex, asset_shaders.font, 0);
     }
    
     // Cube 
@@ -929,7 +1038,7 @@ void setup(int arg_count, char** args) {
             0, 1, 5, 0, 5, 4,
             1, 2, 6, 1, 6, 5,
             2, 3, 7, 2, 7, 6,
-            3, 0, 4, 3, 4, 7
+            3, 0, 4, 3, 4, 7,
         };
 
         make_mesh_from_stack_data(&geometry_primitives.cube, v, i, va, Vertex, asset_shaders.cube, asset_textures.test.id);
@@ -1094,11 +1203,15 @@ void process_inputs(f64 dt) {
     // dr.yz -= mdy * 0.001;
     // dr.xy -= mdx * 0.001;
 
+    if (w->cursor_visible) return;
+    
     // ehh... is there a better solution?
     if (w->is_first_frame) {
         w->is_first_frame = 0;
+        update_camera_projection(&camera);
         // dr = (Rotor3D) {1, 0, 0, 0}; // 3-way free camera
     } else {
+
         if (glfwGetKey(w->handle, GLFW_KEY_Q) == GLFW_PRESS) cam->zx += -TAU * dt * 0.3;
         if (glfwGetKey(w->handle, GLFW_KEY_E) == GLFW_PRESS) cam->zx +=  TAU * dt * 0.3;
 

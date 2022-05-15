@@ -7,12 +7,12 @@
 #include <time.h>
 
 #define GLFW_INCLUDE_NONE
-#define STB_TRUETYPE_IMPLEMENTATION 
+//#define STB_TRUETYPE_IMPLEMENTATION 
 
 #include "glad.h"
 #include "glfw3.h"
 #include "stb_image.h"
-#include "stb_truetype.h"
+//#include "stb_truetype.h"
 
 #include "clean.c"
 #include "linear_algebra.c"
@@ -20,38 +20,11 @@
 
 
 
-// temp
-void draw_char(int id, Camera* cam) {
-
-    Matrix4 m = M4_IDENTITY;
-    Mesh* mesh = &geometry_primitives.cube;
-
-    glUseProgram(mesh->id.shader); 
-    glBindVertexArray(mesh->id.vertex_array);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
-     
-    glBindTexture(GL_TEXTURE_2D, id);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glActiveTexture(GL_TEXTURE0);
-    glUniform1i(glGetUniformLocation(mesh->id.shader, "texture0"), 0);
-    
-    glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "projection"), 1, GL_FALSE, (f32*) &cam->projection);
-    glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "view"), 1, GL_FALSE, (f32*) &cam->view);
-    
-    glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "model"), 1, GL_FALSE, (f32*) &m);
-    glDrawElements(cam->draw_mode, 6, GL_UNSIGNED_INT, NULL);
-}
-
-
-
 int main(int c_arg_count, char** c_args) {
     
     setup(c_arg_count, c_args);
-
+    
+    /*/
     String roboto_ttf = load_file("data/fonts/Roboto-Regular.ttf");
     
     stbtt_fontinfo font;
@@ -93,6 +66,7 @@ int main(int c_arg_count, char** c_args) {
             rgba_bitmap
         );
     }
+    /*/
 
 
     GeometryPrimitives* gp = &geometry_primitives;
@@ -115,9 +89,9 @@ int main(int c_arg_count, char** c_args) {
         .mesh = &gp->cube,
     };
 
-
-    Timer lerp_clock = {0};
-    Timer fps_clock  = {.interval = 1};
+    Timer  lerp_clock = {0};
+    Timer  fps_clock  = {.interval = 1};
+    String fps_string = {calloc(256, sizeof(u8)), 256};
 
     f64 time_now = glfwGetTime();
 
@@ -133,6 +107,7 @@ int main(int c_arg_count, char** c_args) {
             dt       = next - time_now;
             time_now = next;
         }
+        update_FPS_string(&fps_clock, dt, &fps_string);
 
 
         process_inputs(dt);
@@ -143,24 +118,37 @@ int main(int c_arg_count, char** c_args) {
         lerp_clock.base += scaled_dt;
         
         float lerp_value = (1 + sin(lerp_clock.base)) / 2;
-        object.base.orientation  = nlerp_r3d(R3D_DEFAULT, r3d_from_plane_angle(B3_XY, TAU * 0.25), lerp_value);
-        object.base.position     = lerp_v3((Vector3) {0, 0, 1}, (Vector3) {0, 0, 3}, lerp_value);
-        
+        object.base.orientation = nlerp_r3d(R3D_DEFAULT, r3d_from_plane_angle(B3_XY, TAU * 0.25), lerp_value);
+        object.base.position    = lerp_v3((Vector3) {0, 0, 1}, (Vector3) {0, 0, 3}, lerp_value);
+
 
         // render, todo: this is the most expensive part of the loop
-        fill_FPS_at_title(&fps_clock, dt);
+        //fill_FPS_at_title(&fps_clock, dt);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        draw_model(&room, 1, &camera);
         
-        draw_char(my_fid, &camera);
+        draw_model(&room, 1, &camera);
         draw_model(&object, 1, &camera);
+        
+        draw_ring((Vector2) {0.1, 0.1}, (Vector4) {0.5, 0.5, 0.5, 1});
         draw_axis_arrow((Vector3) {0.05, 0.05, 0.05}, &camera);
-    
-        //draw_cursor();
-        //draw_circle();
 
-        // swap buffer
+        //draw_rect(&m, 1, (Vector4) {1, 1, 1, 1});
+        //draw_circle();
+        
+        if (window_info.show_debug_info) {
+
+            String speed = {temp_alloc(128), 128};
+            speed.count = snprintf((char*) speed.data, speed.count, "Engine Speed: %f", engine_speed_scale);
+            
+            draw_string((Vector2) {-0.95, 0.9}, (Vector2) {0.04, 0.04}, fps_string);
+            draw_string((Vector2) {-0.95, 0.8}, (Vector2) {0.04, 0.04}, speed);
+        }
+
+
+        // end frame
+        temp_reset();
+        
         if (glfwWindowShouldClose(window_info.handle)) break;
         glfwSwapBuffers(window_info.handle);
         glfwPollEvents();
