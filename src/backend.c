@@ -9,12 +9,6 @@ typedef struct {
     int height;
     f32 aspect;
 
-    // boolean states
-    int vsync;
-    int cursor_visible;
-    int fullscreen;
-    int is_first_frame;
-
     // prev position for toggle fullscreen
     struct {
         int x;
@@ -28,18 +22,85 @@ typedef struct {
         f64 y;
     } cursor;
 
+    // options and states
+    u8 vsync;
+    u8 cursor_visible;
+    u8 fullscreen;
+    u8 is_first_frame;
+
 } WindowInfo;
 
-typedef struct {
-    f64 base;
-    f64 mark;
-    f64 counter;
-} TimeInfo;
+
+
+
+/* ==== Time ==== */
 
 typedef struct {
     f64 base;
+    f64 counter;
     f64 interval;
 } Timer;
+
+
+
+
+/* ==== Resource ==== */
+
+typedef struct {
+
+    u8* data;
+    int w;
+    int h;
+    int channel;
+
+    u32 id;
+
+} Texture;
+
+
+// global name binding
+
+typedef struct {
+    u32 cube;
+    u32 light;
+    u32 rect;
+    u32 axis;
+} Asset_Shaders;
+
+typedef struct {
+    Texture test;
+} Asset_Textures;
+
+
+
+
+/* ==== Entity ==== */
+
+typedef struct {
+    f32*    vertex_data;
+    u32*    indices;
+    u32     vertex_data_count;
+    u32     index_count;
+    Texture texture; // optional
+    struct {
+        u32 shader;
+        u32 vertex_array;
+        u32 vertices;
+        u32 indices; 
+        u32 texture; // todo: redundant now, as a Texture has it
+    } id;
+} Mesh;
+
+typedef struct {
+    Vector3 position;
+    Vector3 scale;
+    Rotor3D orientation;
+} Entity3D;
+
+typedef struct {
+    Entity3D base;
+    Mesh*    mesh;
+} Model3D;
 
 typedef struct {
     
@@ -63,50 +124,7 @@ typedef struct {
 
 } Camera;
 
-typedef struct {
-    u8* data;
-    int w;
-    int h;
-    int channel;
-} Texture;
-
-// shader source code helper tags
-typedef struct {
-    char* tag;
-    u32   type;
-} ShaderTypeTag;
-
-typedef struct {
-    char* path;
-    u32   id;
-} ShaderFile;
-
-typedef struct {
-    char* path;
-    u32   id;
-    Texture* texture;
-} TextureFile;
-
-
-
-
-/* ==== Entity ==== */
-
-typedef struct {
-    f32*    vertex_data;
-    u32*    indices;
-    u32     vertex_data_count;
-    u32     index_count;
-    Texture texture;
-    struct {
-        u32 shader;
-        u32 vertex_array;
-        u32 vertices;
-        u32 indices; 
-        u32 texture;
-    } id;
-} Mesh;
-
+// global name binding
 typedef struct {
     Mesh axis_arrow;
     Mesh rectangle;
@@ -114,16 +132,7 @@ typedef struct {
     Mesh tetrahedron;
 } GeometryPrimitives;
 
-typedef struct {
-    Vector3 position;
-    Vector3 scale;
-    Rotor3D orientation;
-} Entity3D;
 
-typedef struct {
-    Entity3D base;
-    Mesh*    mesh;
-} Model3D;
 
 
 
@@ -137,36 +146,16 @@ typedef struct {
 __declspec(dllexport) int NvOptimusEnablement = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 
-const f32 TAU   = 6.283185307179586476925286766559;
-const f64 TAU64 = 6.283185307179586476925286766559;
-
 GeometryPrimitives geometry_primitives;
+Asset_Shaders      asset_shaders;
+Asset_Textures     asset_textures;
 
-TimeInfo time_info;
+f32 engine_speed_scale = 1.0;
+
 WindowInfo window_info = {
     .width  = 800,
     .height = 600,
     .vsync  = 1,
-};
-
-ShaderTypeTag shader_type_tags[] = {
-    {"[vert]", GL_VERTEX_SHADER},
-    {"[frag]", GL_FRAGMENT_SHADER},
-    {"[geom]", GL_GEOMETRY_SHADER},
-    {"[comp]", GL_COMPUTE_SHADER},
-    {"[eval]", GL_TESS_EVALUATION_SHADER},
-    {"[ctrl]", GL_TESS_CONTROL_SHADER},
-};
-
-ShaderFile shader_files[] = {
-    {"data/shaders/cube.glsl", 0},
-    {"data/shaders/light.glsl", 0},
-    {"data/shaders/rect.glsl", 0},
-    {"data/shaders/axis.glsl", 0},
-};
-
-TextureFile texture_files[] = {
-    {"data/bitmaps/test.png", 0, 0},
 };
 
 Camera camera = {
@@ -184,7 +173,6 @@ Camera camera = {
     .draw_mode = 4,
 };
 
-f32 engine_speed_scale = 1.0;
 
 
 
@@ -261,36 +249,25 @@ void GL_print_debug_message(
 
 /* ==== Renderer: Utilities ==== */
 
-// todo: clean this up
-f64 get_frametime() {
-
-    WindowInfo* w = &window_info;
-    TimeInfo* t = &time_info;
-
-    f64 now = glfwGetTime();
-    f64 dt  = now - t->base;
-    t->base     = now;
-    t->counter += 1.0;
-    t->mark    += dt;
+void fill_FPS_at_title(Timer* t, f64 dt) {
 
     // FPS display
-    if (t->mark >= 1.0) {
-
-        snprintf(
-            w->title,
-            sizeof(w->title),
-            "Engine   Frametime: %fms  FPS: %f",
-            t->mark / t->counter * 1000,
-            t->counter / t->mark
-        );
-
+    WindowInfo* w = &window_info;
+ 
+    t->base    += dt;
+    t->counter += t->interval;
+   
+    if (t->base >= t->interval) {
+        
+        f64 v = t->counter / t->base / t->interval;
+        snprintf(w->title, sizeof(w->title), "Engine   Frametime: %fms  FPS: %f", 1000 / v, v);
         glfwSetWindowTitle(w->handle, w->title);
-        t->mark = 0.0;
-        t->counter = 0.0;
-    }
 
-    return dt;
+        t->base    = 0;
+        t->counter = 0;
+    }
 }
+
 
 void update_camera_projection(Camera* cam) {
     cam->projection = m4_perspective(cam->FOV * TAU / 360, window_info.aspect, cam->near, cam->far);
@@ -363,7 +340,7 @@ void change_draw_mode(int d) {
 
 void change_engine_speed(int d) {
     engine_speed_scale *= d > 0 ? 2 : 0.5;
-    logprint("Engine Speed: %f\n", engine_speed_scale);
+    logprint("[Engine] Speed Scale: %f\n", engine_speed_scale);
 }
 
 void print_camera_data_as_code(Camera* cam) {
@@ -401,10 +378,10 @@ void print_camera_data_as_code(Camera* cam) {
 
 /* ==== Renderer ==== */
 
-Matrix4 entity_to_m4(Entity3D obj) {
+Matrix4 entity_to_m4(Entity3D e) {
     return m4_mul(
-        m4_translate(obj.position),
-        m4_mul(r3d_to_m4(obj.orientation), m4_scale(obj.scale))
+        m4_translate(e.position),
+        m4_mul(r3d_to_m4(e.orientation), m4_scale(e.scale))
     );
 }
 
@@ -529,18 +506,20 @@ void draw_model(Model3D* model, int count, Camera* cam) {
 
 /* ==== Resource Loading ==== */
 
-Texture* load_texture(char* path, int channel) {
+// todo: only handle RGBA now
+Texture load_texture(char* path, int channel) {
 
-    Texture* t = malloc(sizeof(Texture));
+    Texture t; 
 
-    t->data = stbi_load(path, &t->w, &t->h, NULL, channel);
-    if (!t->data) {
-        logprint("[Error] Cannot load %s\n", path);
-        return NULL;
-    }
+    t.data    = stbi_load(path, &t.w, &t.h, NULL, channel);
+    t.channel = channel;
+    if (!t.data) error("[Texture] Cannot load %s\n", path);
 
-    logprint("Loaded %s\n", path);
-    t->channel = channel;
+    glGenTextures(1, &t.id);
+    glBindTexture(GL_TEXTURE_2D, t.id);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, t.w, t.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, t.data);
+    
+    logprint("[Texture] Loaded %s\n", path);
 
     return t;
 }
@@ -550,22 +529,37 @@ void unload_texture(Texture* t) {
     free(t);
 }
 
-// todo: hardcoded
+
 u32 compile_shader(char* path) {
+           
+    typedef struct {
+        char* tag;
+        u32   type;
+    } TypeTag;
+
+    const TypeTag tags[] = {
+        {"[vert]", GL_VERTEX_SHADER},
+        {"[frag]", GL_FRAGMENT_SHADER},
+        {"[geom]", GL_GEOMETRY_SHADER},
+        {"[comp]", GL_COMPUTE_SHADER},
+        {"[eval]", GL_TESS_EVALUATION_SHADER},
+        {"[ctrl]", GL_TESS_CONTROL_SHADER},
+    };
 
     u32 shader = glCreateProgram();
-    char* code = load_file_as_c_string(path);
-    ShaderTypeTag* tags = shader_type_tags;
 
+    void* (*old_alloc)(u64) = runtime.alloc;
+    runtime.alloc = temp_alloc;
+    char* code = load_file_as_c_string(path);
+    runtime.alloc = old_alloc;
+ 
     if (!code) return 0;
 
     char* ps[6];
-    for (int i = 0; i < 6; i++) {
-        ps[i] = strstr(code, tags[i].tag); // find the tags
-    }
+    for (int i = 0; i < 6; i++) ps[i] = strstr(code, tags[i].tag); // find the tags
     for (int i = 0; i < 6; i++) {
         if (ps[i]) {
-            *ps[i] = '\0'; // "cut" the string (if we have string view we don't need this stupid thing...)
+            *ps[i] = '\0'; // "cut" the string (if only GL takes string view...)
             ps[i] += 8;    // get string starting point without tag
         }
     }
@@ -586,7 +580,7 @@ u32 compile_shader(char* path) {
             if (!success) {
                 char* message = temp_alloc(length);
                 glGetShaderInfoLog(id, length, &length, message);
-                error("In tag %s of %s: %s", tags[i].tag, path, message);
+                error("[GLSL] In tag %s of %s: %s", tags[i].tag, path, message);
                 return 0;
             }
 
@@ -598,12 +592,10 @@ u32 compile_shader(char* path) {
     glLinkProgram(shader);
     glValidateProgram(shader);
 
-    logprint("Compiled %s\n", path);
-    free(code);
+    logprint("[GLSL] Compiled %s\n", path);
 
     return shader;
 }
-
 
 void save_position() {
     logprint("[Save] Position Saved.\n");
@@ -636,6 +628,7 @@ void load_position(Camera* cam) {
     fail:
     logprint("[Save] [Warning] Cannot Load position, use default.\n");
 }
+
 
 
 
@@ -768,28 +761,21 @@ void setup(int arg_count, char** args) {
     /* ---- Load Resources ---- */
 
     {
-        stbi_set_flip_vertically_on_load(1);
-        for (int i = 0; i < sizeof(texture_files) / sizeof(texture_files[0]); i++) {
-            logprint("[Texture] Index %d: ", i);
-            texture_files[i].texture = load_texture(texture_files[i].path, 4);
-            glGenTextures(1, &texture_files[i].id);
-            glBindTexture(GL_TEXTURE_2D, texture_files[i].id);
-            glTexImage2D(
-                GL_TEXTURE_2D, 
-                0, 
-                GL_RGBA,
-                texture_files[i].texture->w, 
-                texture_files[i].texture->h, 
-                0, 
-                GL_RGBA, 
-                GL_UNSIGNED_BYTE, 
-                texture_files[i].texture->data
-            );
-        } 
+        // Load All Textures 
+        {
+            Asset_Textures* t = &asset_textures;
 
-        for (int i = 0; i < sizeof(shader_files) / sizeof(shader_files[0]); i++) {
-            logprint("[GLSL] Index %d: ", i);
-            shader_files[i].id = compile_shader(shader_files[i].path);
+            stbi_set_flip_vertically_on_load(1);
+            t->test = load_texture("data/bitmaps/test.png", 4);
+        }
+
+        // Compile All Shaders 
+        {
+            Asset_Shaders* s = &asset_shaders;
+
+            s->cube = compile_shader("data/shaders/cube.glsl");
+            s->rect = compile_shader("data/shaders/rect.glsl");
+            s->axis = compile_shader("data/shaders/axis.glsl");
         }
 
         load_position(&camera);
@@ -817,9 +803,10 @@ void setup(int arg_count, char** args) {
             0---------1            / |
     */
     
+    
     // Axis arrow
     {
-        Mesh mesh = {0};
+        Mesh* mesh = &geometry_primitives.axis_arrow; 
         
         typedef struct {
             Vector3 pos;
@@ -840,42 +827,40 @@ void setup(int arg_count, char** args) {
                 0, 3,
             };
 
-            mesh.vertex_data = malloc(sizeof(v));
-            mesh.indices     = malloc(sizeof(i));
-            mesh.vertex_data_count = length_of(v) * sizeof(Vertex) / sizeof(f32);
-            mesh.index_count       = length_of(i);  
-            memcpy(mesh.vertex_data, v, sizeof(v)); 
-            memcpy(mesh.indices,     i, sizeof(i)); 
+            mesh->vertex_data = malloc(sizeof(v));
+            mesh->indices     = malloc(sizeof(i));
+            mesh->vertex_data_count = length_of(v) * sizeof(Vertex) / sizeof(f32);
+            mesh->index_count       = length_of(i);  
+            memcpy(mesh->vertex_data, v, sizeof(v)); 
+            memcpy(mesh->indices,     i, sizeof(i)); 
         }
 
-        mesh.id.shader  = shader_files[3].id;
-        mesh.id.texture = 0;
+        mesh->id.shader  = asset_shaders.axis;
+        mesh->id.texture = 0;
         
-        glGenVertexArrays(1, &mesh.id.vertex_array);
-        glGenBuffers(     1, &mesh.id.vertices);
-        glGenBuffers(     1, &mesh.id.indices);
+        glGenVertexArrays(1, &mesh->id.vertex_array);
+        glGenBuffers(     1, &mesh->id.vertices);
+        glGenBuffers(     1, &mesh->id.indices);
 
-        glUseProgram(mesh.id.shader);
+        glUseProgram(mesh->id.shader);
 
-        glBindBuffer(GL_ARRAY_BUFFER, mesh.id.vertices);
-        glBufferData(GL_ARRAY_BUFFER, mesh.vertex_data_count * sizeof(f32), mesh.vertex_data, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
+        glBufferData(GL_ARRAY_BUFFER, mesh->vertex_data_count * sizeof(f32), mesh->vertex_data, GL_DYNAMIC_DRAW);
 
-        glBindVertexArray(mesh.id.vertex_array);
+        glBindVertexArray(mesh->id.vertex_array);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), 0);
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*) (3 * sizeof(f32)));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.id.indices);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh.index_count * sizeof(u32), mesh.indices, GL_DYNAMIC_DRAW);
-        
-        geometry_primitives.axis_arrow = mesh;
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->index_count * sizeof(u32), mesh->indices, GL_DYNAMIC_DRAW);
     }
 
   
     // Rectangle
     {
-        Mesh mesh = {0};
+        Mesh* mesh = &geometry_primitives.rectangle;
         
         typedef struct {
             Vector2 pos;
@@ -896,39 +881,37 @@ void setup(int arg_count, char** args) {
                 0, 2, 3
             };
 
-            mesh.vertex_data = malloc(sizeof(v));
-            mesh.indices     = malloc(sizeof(i));
-            mesh.vertex_data_count = length_of(v) * sizeof(Vertex) / sizeof(f32);
-            mesh.index_count       = length_of(i);  
-            memcpy(mesh.vertex_data, v, sizeof(v)); 
-            memcpy(mesh.indices,     i, sizeof(i)); 
+            mesh->vertex_data = malloc(sizeof(v));
+            mesh->indices     = malloc(sizeof(i));
+            mesh->vertex_data_count = length_of(v) * sizeof(Vertex) / sizeof(f32);
+            mesh->index_count       = length_of(i);  
+            memcpy(mesh->vertex_data, v, sizeof(v)); 
+            memcpy(mesh->indices,     i, sizeof(i)); 
         }
 
-        mesh.id.shader  = shader_files[2].id;
-        mesh.id.texture = 0;
+        mesh->id.shader  = asset_shaders.rect;
+        mesh->id.texture = 0;
         
-        glGenVertexArrays(1, &mesh.id.vertex_array);
-        glGenBuffers(     1, &mesh.id.vertices);
-        glGenBuffers(     1, &mesh.id.indices);
+        glGenVertexArrays(1, &mesh->id.vertex_array);
+        glGenBuffers(     1, &mesh->id.vertices);
+        glGenBuffers(     1, &mesh->id.indices);
 
-        glUseProgram(mesh.id.shader);
+        glUseProgram(mesh->id.shader);
 
-        glBindBuffer(GL_ARRAY_BUFFER, mesh.id.vertices);
-        glBufferData(GL_ARRAY_BUFFER, mesh.vertex_data_count * sizeof(f32), mesh.vertex_data, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
+        glBufferData(GL_ARRAY_BUFFER, mesh->vertex_data_count * sizeof(f32), mesh->vertex_data, GL_DYNAMIC_DRAW);
 
-        glBindVertexArray(mesh.id.vertex_array);
+        glBindVertexArray(mesh->id.vertex_array);
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), 0);
         glEnableVertexAttribArray(0);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.id.indices);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh.index_count * sizeof(u32), mesh.indices, GL_DYNAMIC_DRAW);
-        
-        geometry_primitives.rectangle = mesh;
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->index_count * sizeof(u32), mesh->indices, GL_DYNAMIC_DRAW);
     }
 
     // Cube 
     {
-        Mesh mesh = {0};
+        Mesh* mesh = &geometry_primitives.cube;
         
         typedef struct {
             Vector3 pos;
@@ -959,27 +942,27 @@ void setup(int arg_count, char** args) {
                 3, 0, 4, 3, 4, 7
             };
 
-            mesh.vertex_data = malloc(sizeof(v));
-            mesh.indices     = malloc(sizeof(i));
-            mesh.vertex_data_count = length_of(v) * sizeof(Vertex) / sizeof(f32);
-            mesh.index_count       = length_of(i);  
-            memcpy(mesh.vertex_data, v, sizeof(v)); 
-            memcpy(mesh.indices,     i, sizeof(i)); 
+            mesh->vertex_data = malloc(sizeof(v));
+            mesh->indices     = malloc(sizeof(i));
+            mesh->vertex_data_count = length_of(v) * sizeof(Vertex) / sizeof(f32);
+            mesh->index_count       = length_of(i);  
+            memcpy(mesh->vertex_data, v, sizeof(v)); 
+            memcpy(mesh->indices,     i, sizeof(i)); 
         }
 
-        mesh.id.shader  = shader_files[0].id;
-        mesh.id.texture = texture_files[0].id;
+        mesh->id.shader  = asset_shaders.cube;
+        mesh->id.texture = asset_textures.test.id;
         
-        glGenVertexArrays(1, &mesh.id.vertex_array);
-        glGenBuffers(     1, &mesh.id.vertices);
-        glGenBuffers(     1, &mesh.id.indices);
+        glGenVertexArrays(1, &mesh->id.vertex_array);
+        glGenBuffers(     1, &mesh->id.vertices);
+        glGenBuffers(     1, &mesh->id.indices);
 
-        glUseProgram(mesh.id.shader);
+        glUseProgram(mesh->id.shader);
 
-        glBindBuffer(GL_ARRAY_BUFFER, mesh.id.vertices);
-        glBufferData(GL_ARRAY_BUFFER, mesh.vertex_data_count * sizeof(f32), mesh.vertex_data, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
+        glBufferData(GL_ARRAY_BUFFER, mesh->vertex_data_count * sizeof(f32), mesh->vertex_data, GL_DYNAMIC_DRAW);
 
-        glBindVertexArray(mesh.id.vertex_array);
+        glBindVertexArray(mesh->id.vertex_array);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), 0);
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*) (3 * sizeof(f32)));
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*) (5 * sizeof(f32)));
@@ -987,16 +970,14 @@ void setup(int arg_count, char** args) {
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.id.indices);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh.index_count * sizeof(u32), mesh.indices, GL_DYNAMIC_DRAW);
-        
-        geometry_primitives.cube = mesh;
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->index_count * sizeof(u32), mesh->indices, GL_DYNAMIC_DRAW);
     }
 
     // Tetrahedron 
     {
         
-        Mesh mesh = {0};
+        Mesh* mesh = &geometry_primitives.tetrahedron;
         
         typedef struct {
             Vector3 pos;
@@ -1023,27 +1004,27 @@ void setup(int arg_count, char** args) {
             };
 
             // if only we can direct fill using the same syntax...
-            mesh.vertex_data = malloc(sizeof(v));
-            mesh.indices     = malloc(sizeof(i));
-            mesh.vertex_data_count = length_of(v) * sizeof(Vertex) / sizeof(f32);
-            mesh.index_count       = length_of(i);  
-            memcpy(mesh.vertex_data, v, sizeof(v)); 
-            memcpy(mesh.indices,     i, sizeof(i)); 
+            mesh->vertex_data = malloc(sizeof(v));
+            mesh->indices     = malloc(sizeof(i));
+            mesh->vertex_data_count = length_of(v) * sizeof(Vertex) / sizeof(f32);
+            mesh->index_count       = length_of(i);  
+            memcpy(mesh->vertex_data, v, sizeof(v)); 
+            memcpy(mesh->indices,     i, sizeof(i)); 
         }
 
-        mesh.id.shader  = shader_files[0].id;
-        mesh.id.texture = texture_files[0].id;
+        mesh->id.shader  = asset_shaders.cube;
+        mesh->id.texture = asset_textures.test.id;
         
-        glGenVertexArrays(1, &mesh.id.vertex_array);
-        glGenBuffers(     1, &mesh.id.vertices);
-        glGenBuffers(     1, &mesh.id.indices);
+        glGenVertexArrays(1, &mesh->id.vertex_array);
+        glGenBuffers(     1, &mesh->id.vertices);
+        glGenBuffers(     1, &mesh->id.indices);
 
-        glUseProgram(mesh.id.shader);
+        glUseProgram(mesh->id.shader);
 
-        glBindBuffer(GL_ARRAY_BUFFER, mesh.id.vertices);
-        glBufferData(GL_ARRAY_BUFFER, mesh.vertex_data_count * sizeof(f32), mesh.vertex_data, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
+        glBufferData(GL_ARRAY_BUFFER, mesh->vertex_data_count * sizeof(f32), mesh->vertex_data, GL_DYNAMIC_DRAW);
 
-        glBindVertexArray(mesh.id.vertex_array);
+        glBindVertexArray(mesh->id.vertex_array);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), 0);
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*) (3 * sizeof(f32)));
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*) (5 * sizeof(f32)));
@@ -1051,10 +1032,8 @@ void setup(int arg_count, char** args) {
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.id.indices);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh.index_count * sizeof(u32), mesh.indices, GL_DYNAMIC_DRAW);
-        
-        geometry_primitives.tetrahedron = mesh;
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->index_count * sizeof(u32), mesh->indices, GL_DYNAMIC_DRAW);
     }
 }
 
@@ -1142,6 +1121,7 @@ for (int i = 1; i < length_of(bodies); i++) {
 //     update_position(&bodies[i], dt);
 // }
 // camera.position = v3_add(bodies[which_object].base.position, (Vector3) {0, 0, 10});
+/*/
 
 
 

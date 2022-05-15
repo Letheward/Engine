@@ -1,3 +1,20 @@
+/* ==== Macros ==== */ 
+
+#define string(s)            (String) {(u8*) s, sizeof(s) - 1}
+#define array_string(s)      (String) {(u8*) s, sizeof(s)}
+#define data_string(s)       (String) {(u8*) &s, sizeof(s)}
+#define length_of(array)     (sizeof(array) / sizeof(array[0]))
+#define array(Type, c_array) (Array(Type)) {c_array, length_of(c_array)}
+
+#define Array(Type) Array_ ## Type
+#define Define_Array(Type) \
+typedef struct {           \
+    Type* data;            \
+    u64   count;           \
+} Array(Type)              \
+
+
+
 
 /* ==== Types ==== */ 
 
@@ -22,26 +39,15 @@ typedef struct {
     u64    allocated;
 } StringBuilder;
 
-
-
-
-
-/* ==== Macros ==== */ 
-
-#define string(s)            (String) {(u8*) s, sizeof(s) - 1}
-#define array_string(s)      (String) {(u8*) s, sizeof(s)}
-#define data_string(s)       (String) {(u8*) &s, sizeof(s)}
-#define length_of(array)     (sizeof(array) / sizeof(array[0]))
-#define array(Type, c_array) (Array(Type)) {c_array, length_of(c_array)}
-
-#define Array(Type) Array_ ## Type
-#define Define_Array(Type) \
-typedef struct {           \
-    Type* data;            \
-    u64   count;           \
-} Array(Type)              \
-
 Define_Array(String);
+
+
+
+
+/* ==== Constants ==== */
+
+const f32 TAU   = 6.283185307179586476925286766559;
+const f64 TAU64 = 6.283185307179586476925286766559;
 
 
 
@@ -191,7 +197,7 @@ void print(String s) {
 
 String find(String a, String b) {
     
-    if (a.data == NULL || b.data == NULL) return (String) {0};
+    if (!a.data || !b.data || !a.count || !b.count) return (String) {0};
     
     for (u64 i = 0; i < a.count; i++) {
         if (a.data[i] == b.data[0]) {

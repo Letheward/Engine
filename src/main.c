@@ -65,34 +65,34 @@ int main(int c_arg_count, char** c_args) {
     // }
     
     // find a simple way to draw a quad
-
-    int w, h;
-    u8* bitmap = stbtt_GetCodepointBitmap(&font, 0, stbtt_ScaleForPixelHeight(&font, 256), 'A', &w, &h, 0, 0);
-    
-    // todo: use red channel don't work, why????
-    u8* rgba_bitmap = calloc(1, w * h * 4); 
-    for (int j = 0; j < h; j++) {
-        for (int i = 0; i < w; i++) {
-            int x = j * w + i;
-            rgba_bitmap[x * 4] = bitmap[x];
-        }
-    }
-    
     u32 my_fid;
-    glGenTextures(1, &my_fid);
-    glBindTexture(GL_TEXTURE_2D, my_fid);
-    glTexImage2D(
-        GL_TEXTURE_2D, 
-        0, 
-        GL_RGBA,
-        w, 
-        h, 
-        0, 
-        GL_RGBA, 
-        GL_UNSIGNED_BYTE, 
-        rgba_bitmap
-    );
-
+    {
+        int w, h;
+        u8* bitmap = stbtt_GetCodepointBitmap(&font, 0, stbtt_ScaleForPixelHeight(&font, 256), 'A', &w, &h, 0, 0);
+        
+        // todo: use red channel don't work, why????
+        u8* rgba_bitmap = calloc(1, w * h * 4); 
+        for (int j = 0; j < h; j++) {
+            for (int i = 0; i < w; i++) {
+                int x = j * w + i;
+                rgba_bitmap[x * 4] = bitmap[x];
+            }
+        }
+        
+        glGenTextures(1, &my_fid);
+        glBindTexture(GL_TEXTURE_2D, my_fid);
+        glTexImage2D(
+            GL_TEXTURE_2D, 
+            0, 
+            GL_RGBA,
+            w, 
+            h, 
+            0, 
+            GL_RGBA, 
+            GL_UNSIGNED_BYTE, 
+            rgba_bitmap
+        );
+    }
 
 
     GeometryPrimitives* gp = &geometry_primitives;
@@ -103,7 +103,7 @@ int main(int c_arg_count, char** c_args) {
             .scale       = {1, 1, 1},
             .orientation = {1, 0, 0, 0},
         },
-        .mesh = &gp->cube,
+        .mesh = &gp->tetrahedron,
     };
 
     Model3D room = {
@@ -116,25 +116,39 @@ int main(int c_arg_count, char** c_args) {
     };
 
 
-    time_info.base = glfwGetTime();
     Timer lerp_clock = {0};
+    Timer fps_clock  = {.interval = 1};
+
+    f64 time_now = glfwGetTime();
 
 
     // main loop
     while (1) {
 
-        // simulate
-        f64 dt = get_frametime(); 
+
+        // get dt
+        f64 dt;
+        {
+            f64 next = glfwGetTime();
+            dt       = next - time_now;
+            time_now = next;
+        }
+
+
         process_inputs(dt);
-        dt *= engine_speed_scale;
-        
-        lerp_clock.base += dt;
+
+
+        // simulate
+        f64 scaled_dt    = dt * engine_speed_scale;
+        lerp_clock.base += scaled_dt;
         
         float lerp_value = (1 + sin(lerp_clock.base)) / 2;
         object.base.orientation  = nlerp_r3d(R3D_DEFAULT, r3d_from_plane_angle(B3_XY, TAU * 0.25), lerp_value);
-        object.base.position     = lerp_v3((Vector3) {0, 0, 1}, (Vector3) {0, 0, 2}, lerp_value);
+        object.base.position     = lerp_v3((Vector3) {0, 0, 1}, (Vector3) {0, 0, 3}, lerp_value);
         
+
         // render, todo: this is the most expensive part of the loop
+        fill_FPS_at_title(&fps_clock, dt);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         draw_model(&room, 1, &camera);
@@ -147,13 +161,14 @@ int main(int c_arg_count, char** c_args) {
         //draw_circle();
 
 
+        // swap buffer
         if (glfwWindowShouldClose(window_info.handle)) break;
         glfwSwapBuffers(window_info.handle);
         glfwPollEvents();
     }
     
     save_position();
-    glfwTerminate(); // cleanup
+    glfwTerminate(); 
 
     return 0;
 }
