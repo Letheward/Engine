@@ -51,6 +51,10 @@ typedef struct {f32 s, yz, zx, xy;} Rotor3D;
 
 /* ==== Constants ==== */
 
+const Vector2 V2_UNIT = {1, 1};
+const Vector3 V3_UNIT = {1, 1, 1};
+const Vector4 V4_UNIT = {1, 1, 1, 1};
+
 const Vector3   V3_X  = {1, 0, 0};
 const Vector3   V3_Y  = {0, 1, 0};
 const Vector3   V3_Z  = {0, 0, 1};

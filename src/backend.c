@@ -150,8 +150,6 @@ typedef struct {
 
 
 
-
-
 /* ==== Global Data ==== */
 
 // stupid global variables to force laptop to use dedicated GPU
@@ -265,10 +263,8 @@ void GL_print_debug_message(
 /* ==== Renderer: Utilities ==== */
 
 void update_FPS_timer(Timer* t, f64 dt) {
-
     t->base    += dt;
     t->counter += t->interval;
-    
     if (t->base >= t->interval) {
         t->base    = 0;
         t->counter = 0;
@@ -350,8 +346,8 @@ void change_draw_mode(int d) {
     }
 }
 
-void change_engine_speed(int d) {
-    engine_speed_scale *= d > 0 ? 2 : 0.5;
+void change_engine_speed(f32 scale) {
+    engine_speed_scale *= scale;
     logprint("[Engine] Speed Scale: %f\n", engine_speed_scale);
 }
 
@@ -392,7 +388,7 @@ void draw_axis_arrow(Vector3 scale, Camera* cam) {
     glDisable(GL_DEPTH_TEST);
     glLineWidth(2);
    
-    glDrawElements(GL_LINES, 6, GL_UNSIGNED_INT, NULL);
+    glDrawElements(GL_LINES, mesh->index_count, GL_UNSIGNED_INT, NULL);
     
     glEnable(GL_DEPTH_TEST);
     glLineWidth(1);
@@ -420,7 +416,7 @@ void draw_ring(Vector2 scale, f32 line_width, Vector4 color) {
     glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m);
     
     glLineWidth(line_width);
-    glDrawElements(GL_LINES, 72, GL_UNSIGNED_INT, NULL);
+    glDrawElements(GL_LINES, mesh->index_count, GL_UNSIGNED_INT, NULL);
     glLineWidth(1);
 
     glDisable(GL_BLEND);
@@ -446,7 +442,7 @@ void draw_circle(Vector2 scale, Vector4 color) {
     glUniform4fv(glGetUniformLocation(mesh->id.shader, "color"), 1, (f32*) &color);
     glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m);
     
-    glDrawElements(GL_TRIANGLES, 36 * 3, GL_UNSIGNED_INT, NULL);
+    glDrawElements(GL_TRIANGLES, mesh->index_count, GL_UNSIGNED_INT, NULL);
 
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
@@ -472,7 +468,7 @@ void draw_rect(Matrix2* m, int count, Vector4 color) {
 
     for (int i = 0; i < count; i++) {
         glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m[i]);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, NULL);
+        glDrawElements(GL_TRIANGLES, mesh->index_count, GL_UNSIGNED_INT, NULL);
     }
 
     glDisable(GL_BLEND);
@@ -570,10 +566,10 @@ void make_mesh(
     Mesh* mesh, 
     f32*  vertices, 
     u32*  indices, 
-    u32*  vertex_array_structure,
+    u32*  vertex_structure,
     u32   vertex_count, 
     u32   index_count,
-    u32   vertex_array_structure_count,
+    u32   vertex_structure_count,
     u64   vertex_size, 
     u32   shader,
     u32   texture,
@@ -611,10 +607,10 @@ void make_mesh(
     glBindVertexArray(mesh->id.vertex_array);
     
     u32 step = 0;
-    for (u32 i = 0; i < vertex_array_structure_count; i++) {
-        glVertexAttribPointer(i, vertex_array_structure[i], GL_FLOAT, GL_FALSE, vertex_size, (void*) (step * sizeof(f32)));
+    for (u32 i = 0; i < vertex_structure_count; i++) {
+        glVertexAttribPointer(i, vertex_structure[i], GL_FLOAT, GL_FALSE, vertex_size, (void*) (step * sizeof(f32)));
         glEnableVertexAttribArray(i);
-        step += vertex_array_structure[i];
+        step += vertex_structure[i];
     }
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
@@ -763,8 +759,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
             case GLFW_KEY_F11:    toggle_fullscreen(); break;
             case GLFW_KEY_Z:      change_draw_mode(-1); break;
             case GLFW_KEY_X:      change_draw_mode(1); break;
-            case GLFW_KEY_UP:     change_engine_speed(1); break;
-            case GLFW_KEY_DOWN:   change_engine_speed(-1); break;
+            case GLFW_KEY_UP:     change_engine_speed(2); break;
+            case GLFW_KEY_DOWN:   change_engine_speed(0.5); break;
         }
     }
 }
@@ -960,19 +956,19 @@ void setup(int arg_count, char** args) {
         
         u32 vertex_structure[] = {2};
 
-        const u32 edge_count   = 36;
+        const u32 edges   = 36;
         
-        u32 vertex_count = edge_count;
-        u32 index_count  = edge_count * 2;
+        u32 vertex_count = edges;
+        u32 index_count  = edges * 2;
         Vertex* vertices = malloc(sizeof(Vertex) * vertex_count); 
         u32*    indices  = malloc(sizeof(u32)    * index_count); 
 
         for (int i = 0; i < vertex_count; i++) {
-            f32 rad  = TAU * i / (f32) edge_count;
+            f32 rad  = TAU * i / (f32) edges;
             vertices[i].pos = (Vector2) {cosf(rad), sinf(rad)};
         }
 
-        for (int i = 0; i < edge_count - 1; i++) {
+        for (int i = 0; i < edges - 1; i++) {
             indices[i * 2 + 0] = i;
             indices[i * 2 + 1] = i + 1;
         }
@@ -981,8 +977,8 @@ void setup(int arg_count, char** args) {
 
         make_mesh(
             &geometry_primitives.ring,
-            (f32*) vertices, indices, vertex_structure,
-            vertex_count, index_count, length_of(vertex_structure), 
+            (f32*) vertices, indices,     vertex_structure,
+            vertex_count,    index_count, length_of(vertex_structure), 
             sizeof(Vertex), asset_shaders.rect, 0, 0
         );
     }
@@ -995,32 +991,32 @@ void setup(int arg_count, char** args) {
         
         u32 vertex_structure[] = {2};
         
-        const u32 edge_count = 36;
+        const u32 edges = 36;
 
-        u32 vertex_count = edge_count + 1;
-        u32 index_count  = edge_count * 3;
+        u32 vertex_count = edges + 1;
+        u32 index_count  = edges * 3;
 
         Vertex* vertices = malloc(sizeof(Vertex) * vertex_count); 
         u32*    indices  = malloc(sizeof(u32)    * index_count);
 
         for (int i = 1; i < vertex_count; i++) {
-            f32 rad = TAU * i / (f32) edge_count;
+            f32 rad = TAU * i / (f32) edges;
             vertices[i].pos = (Vector2) {cosf(rad), sinf(rad)};
         }
         
-        for (int j = 0; j < edge_count; j++) {
+        for (int j = 0; j < edges; j++) {
             indices[j * 3 + 0] = 0;
             indices[j * 3 + 1] = j + 1;
             indices[j * 3 + 2] = j + 2;
         }
         
         vertices[0].pos = (Vector2) {0, 0};
-        indices[edge_count * 3 - 1] = 1;
+        indices[edges * 3 - 1] = 1;
 
         make_mesh(
             &geometry_primitives.circle,
-            (f32*) vertices, indices, vertex_structure,
-            vertex_count, index_count, length_of(vertex_structure), 
+            (f32*) vertices, indices,     vertex_structure,
+            vertex_count,    index_count, length_of(vertex_structure), 
             sizeof(Vertex), asset_shaders.rect, 0, 0
         );
     }
@@ -1031,10 +1027,10 @@ void setup(int arg_count, char** args) {
             Vector2 pos;
         } Vertex;
 
-        f32 s = 0.5; // will get a 1 * 1 rect, center at 0, 0, 0
-
         u32 va[] = {2};
 
+        const f32 s = 0.5; // will get a 1 * 1 rect, center at 0, 0, 0
+        
         Vertex v[] = {
             {{-s, -s}},
             {{ s, -s}},
@@ -1057,9 +1053,9 @@ void setup(int arg_count, char** args) {
             Vector2 uv;
         } Vertex;
 
-        f32 s = 0.5; // will get a 1 * 1 rect, center at 0, 0, 0
-
         u32 va[] = {2, 2};
+        
+        const f32 s = 0.5; // will get a 1 * 1 rect, center at 0, 0, 0
 
         Vertex v[] = {
             {{-s, -s}, {0, 0}},
@@ -1084,9 +1080,9 @@ void setup(int arg_count, char** args) {
             Vector3 color;
         } Vertex;
 
-        f32 s = 0.5; // will get a 1 * 1 * 1 cube, center at 0, 0, 0
-        
         u32 va[] = {3, 2, 3};
+        
+        const f32 s = 0.5; // will get a 1 * 1 * 1 cube, center at 0, 0, 0
         
         Vertex v[] = {
             {{-s, -s, -s}, {0, 0}, {1, 0, 0}}, 
@@ -1119,10 +1115,10 @@ void setup(int arg_count, char** args) {
             Vector3 color;
         } Vertex;
 
-        f32 sv = 0.866025; // sqrt(0.75), sqrt(size^2 + (size/2)^2) = sqrt(0.75) * size
-        f32 s  = 1; 
-
         u32 va[] = {3, 2, 3};
+        
+        const f32 sv = 0.866025; // sqrt(0.75), sqrt(size^2 + (size/2)^2) = sqrt(0.75) * size
+        const f32 s  = 1; 
         
         Vertex v[] = {
             {{-s * sv, -s * 0.5, -s * 0.75}, {1, 0}, {1, 1, 1}},
@@ -1141,8 +1137,7 @@ void setup(int arg_count, char** args) {
         make_mesh_from_stack_data(&geometry_primitives.tetrahedron, v, i, va, Vertex, asset_shaders.cube, asset_textures.test.id);
     }
     
-
-    // todo: make this work
+    // todo: cleanup, figure out uv
     // Sphere 
     {
         typedef struct {
@@ -1150,49 +1145,128 @@ void setup(int arg_count, char** args) {
             Vector2 uv;
             Vector3 color;
         } Vertex;
+        
+        u32 vertex_structure[] = {3, 2, 3};
+        
+        const u32 edges = 36;
+       
+        u32 vertex_count = (edges / 2 - 1) * edges + 2;
+        u32 index_count  = 2 * edges * 3 + (edges / 2 - 2) * edges * 3 * 2;
 
-        f32 s = 0.5; // will get a 1 * 1 * 1 sphere, center at 0, 0, 0
+        Vertex* vertices = malloc(sizeof(Vertex) * vertex_count); 
+        u32*    indices  = malloc(sizeof(u32)    * index_count);
         
-        u32 va[] = {3, 2, 3};
-        
-        Vertex v[] = {
-            {{-s, -s, -s}, {0, 0}, {1, 0, 0}}, 
-            {{ s, -s, -s}, {1, 0}, {0, 1, 0}},
-            {{ s,  s, -s}, {1, 1}, {0, 0, 1}},
-            {{-s,  s, -s}, {0, 1}, {1, 1, 1}},
-            {{-s, -s,  s}, {0, 0}, {0, 1, 1}},
-            {{ s, -s,  s}, {1, 0}, {1, 0, 1}},
-            {{ s,  s,  s}, {1, 1}, {1, 1, 0}},
-            {{-s,  s,  s}, {0, 1}, {0, 0, 0}},
-        };
+        // fill vertices
+        for (u32 i = 1; i < edges / 2; i++) {
+            f32 r1 = TAU * (0.25 - i / (f32) edges);
+            for (u32 j = 0; j < edges; j++) {
+                
+                f32 r2 = TAU * j / (f32) edges;
+                
+                f32 cr1 = cosf(r1);
+                f32 sr1 = sinf(r1);
+                f32 cr2 = cosf(r2);
+                f32 sr2 = sinf(r2);
 
-        u32 i[] = {
-            3, 2, 1, 3, 1, 0,
-            4, 5, 6, 4, 6, 7,
-            0, 1, 5, 0, 5, 4,
-            1, 2, 6, 1, 6, 5,
-            2, 3, 7, 2, 7, 6,
-            3, 0, 4, 3, 4, 7,
-        };
+                u32 pos = 1 + (i - 1) * edges + j;
+                vertices[pos] = (Vertex) {{cr2 * cr1, sr2 * cr1, sr1}, {cr2, sr1}, {1, 1, 1}};
+            }
+        }
+
+        vertices[0               ] = (Vertex) {{0, 0,  1}, {0, 0}, {1, 1, 1}};
+        vertices[vertex_count - 1] = (Vertex) {{0, 0, -1}, {1, 1}, {1, 1, 1}};
+       
+
+        u32 acc = 0;
         
+        // top cap
+        for (u32 i = 1; i < edges; i++) {
+            u32 i0 = 0;
+            u32 i1 = i;
+            u32 i2 = i + 1;
+            indices[acc + 0] = i0;
+            indices[acc + 1] = i1;
+            indices[acc + 2] = i2;
+            acc += 3;
+        }
+        {
+            // loop back
+            u32 i0 = 0;
+            u32 i1 = edges;
+            u32 i2 = 1;
+            indices[acc + 0] = i0;
+            indices[acc + 1] = i1;
+            indices[acc + 2] = i2;
+            acc += 3;
+        }
+       
+
+        // middle strips
+        for (u32 i = 1; i < edges / 2 - 1; i++) {
+            u32 up   = (i - 1) * edges + 1;
+            u32 down = (i) * edges + 1;
+            for (u32 j = 0; j < edges - 1; j++) {
+                u32 i0 = up   + j;
+                u32 i1 = down + j;
+                u32 i2 = up   + j + 1;
+                u32 i3 = down + j + 1;
+                indices[acc + 0] = i0;
+                indices[acc + 1] = i1;
+                indices[acc + 2] = i3;
+
+                indices[acc + 3] = i0;
+                indices[acc + 4] = i3;
+                indices[acc + 5] = i2;
+                acc += 6;
+            }
+            {
+                // loop back
+                u32 j = edges - 1;
+
+                u32 i0 = up   + j;
+                u32 i1 = down + j;
+                u32 i2 = up;
+                u32 i3 = down;
+                indices[acc + 0] = i0;
+                indices[acc + 1] = i1;
+                indices[acc + 2] = i3;
+
+                indices[acc + 3] = i0;
+                indices[acc + 4] = i3;
+                indices[acc + 5] = i2;
+                acc += 6;
+            }
+        }
+        
+        // bottom cap
+        for (u32 i = edges * (edges / 2 - 2) + 1; i < vertex_count - 2; i++) {
+            u32 i0 = vertex_count - 1;
+            u32 i1 = i;
+            u32 i2 = i + 1;
+            indices[acc + 0] = i0;
+            indices[acc + 1] = i2;
+            indices[acc + 2] = i1;
+            acc += 3;
+        }
+        {
+            // loop back
+            u32 i = edges * (edges / 2 - 2) + 1;
+            u32 i0 = vertex_count - 1;
+            u32 i1 = vertex_count - 2;
+            u32 i2 = i;
+            indices[acc + 0] = i0;
+            indices[acc + 1] = i2;
+            indices[acc + 2] = i1;
+            acc += 3;
+        }
+
         make_mesh(
             &geometry_primitives.sphere,
-            (f32*) v,
-            i,
-            va,
-            length_of(v),
-            length_of(i),
-            length_of(va),
-            sizeof(Vertex),
-            asset_shaders.cube,
-            asset_textures.test.id,
-            1
+            (f32*) vertices, indices,     vertex_structure,
+            vertex_count,    index_count, length_of(vertex_structure), 
+            sizeof(Vertex), asset_shaders.cube, asset_textures.test.id, 0
         );
-
-        //make_mesh_from_stack_data(&geometry_primitives.sphere, v, i, va, Vertex, asset_shaders.cube, asset_textures.test.id);
     }
-
-
 }
 
 

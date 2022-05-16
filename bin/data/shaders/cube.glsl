@@ -37,5 +37,5 @@ vec3 ambient = 0.6 * vec3(0.8, 0.9, 0.6);
 vec3 diffuse = vec3(0.1, 0.1, 0.1);
 
 void main() {
-    out_color = /* vec4((ambient + diffuse), 1.0) *  */texture(texture0, tex_coord);
+    out_color = texture(texture0, tex_coord); //* vec4((ambient + diffuse), 1.0);
 }

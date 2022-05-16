@@ -73,16 +73,16 @@ int main(int c_arg_count, char** c_args) {
     
     Model3D object = {
         .base = {
-            .position    = {1, 2, 2},
+            .position    = {0, 0, 2},
             .scale       = {1, 1, 1},
             .orientation = {1, 0, 0, 0},
         },
-        .mesh = &gp->tetrahedron,
+        .mesh = &gp->sphere,
     };
-
+    
     Model3D room = {
         .base = {
-            .position    = {3, 3, 10},
+            .position    = {0, 0, 10},
             .scale       = {100, 100, 20},
             .orientation = {1, 0, 0, 0},
         },
