@@ -82,16 +82,16 @@ int main(int c_arg_count, char** c_args) {
 
     Model3D room = {
         .base = {
-            .position    = {3, 3, 3},
-            .scale       = {100, 100, 10},
+            .position    = {3, 3, 10},
+            .scale       = {100, 100, 20},
             .orientation = {1, 0, 0, 0},
         },
         .mesh = &gp->cube,
     };
 
-    Timer  lerp_clock = {0};
-    Timer  fps_clock  = {.interval = 1};
-    String fps_string = {calloc(256, sizeof(u8)), 256};
+    Timer lerp_clock   = {0};
+    Timer cursor_pulse = {0};
+    Timer fps_clock    = {.interval = 1};
 
     f64 time_now = glfwGetTime();
 
@@ -107,42 +107,53 @@ int main(int c_arg_count, char** c_args) {
             dt       = next - time_now;
             time_now = next;
         }
-        update_FPS_string(&fps_clock, dt, &fps_string);
-
-
-        process_inputs(dt);
+        update_FPS_timer(&fps_clock, dt);
 
 
         // simulate
-        f64 scaled_dt    = dt * engine_speed_scale;
-        lerp_clock.base += scaled_dt;
+        process_inputs(dt);
+        f64 scaled_dt      = dt * engine_speed_scale;
+        lerp_clock.base   += scaled_dt;
+        cursor_pulse.base += dt * 4;
         
-        float lerp_value = (1 + sin(lerp_clock.base)) / 2;
+        f32 lerp_value          = sin_normalize(lerp_clock.base);
         object.base.orientation = nlerp_r3d(R3D_DEFAULT, r3d_from_plane_angle(B3_XY, TAU * 0.25), lerp_value);
         object.base.position    = lerp_v3((Vector3) {0, 0, 1}, (Vector3) {0, 0, 3}, lerp_value);
 
 
         // render, todo: this is the most expensive part of the loop
-        //fill_FPS_at_title(&fps_clock, dt);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        
+        // 3D        
         draw_model(&room, 1, &camera);
         draw_model(&object, 1, &camera);
-        
-        draw_ring((Vector2) {0.1, 0.1}, (Vector4) {0.5, 0.5, 0.5, 1});
-        draw_axis_arrow((Vector3) {0.05, 0.05, 0.05}, &camera);
 
-        //draw_rect(&m, 1, (Vector4) {1, 1, 1, 1});
-        //draw_circle();
-        
+        // 2D
         if (window_info.show_debug_info) {
 
             String speed = {temp_alloc(128), 128};
-            speed.count = snprintf((char*) speed.data, speed.count, "Engine Speed: %f", engine_speed_scale);
+            String fps   = {temp_alloc(128), 128};
+
+            {
+                Timer* t = &fps_clock;
+                f64 v = t->counter / t->base / t->interval;
+                fps.count   = snprintf((char*) fps.data,   fps.count,   "Frametime: %fms  FPS: %f", 1000 / v, v);
+                speed.count = snprintf((char*) speed.data, speed.count, "Engine Speed: %f", engine_speed_scale);
+                if (window_info.is_first_frame) fps.count = 0;
+            }
             
-            draw_string((Vector2) {-0.95, 0.9}, (Vector2) {0.04, 0.04}, fps_string);
-            draw_string((Vector2) {-0.95, 0.8}, (Vector2) {0.04, 0.04}, speed);
+            Vector2 text_scale = {0.04, 0.04};
+            Vector4 text_color = {0.9, 0.9, 0.9, 1};
+            draw_string((Vector2) {-0.95, 0.9}, text_scale, text_color, fps);
+            draw_string((Vector2) {-0.95, 0.8}, text_scale, text_color, speed);
+            draw_axis_arrow((Vector3) {0.05, 0.05, 0.05}, &camera);
+
+        } else {
+            
+            // cursor
+            Vector2 pulse = lerp_v2((Vector2) {0.010, 0.010}, (Vector2) {0.012, 0.012}, sin_normalize(cursor_pulse.base));
+            draw_circle(pulse, (Vector4) {1, 1, 1, 1});
+            draw_ring(v2_add(pulse, (Vector2) {0.005, 0.005}), 2, (Vector4) {0.3, 0.3, 0.3, 1});
         }
 
 

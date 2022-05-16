@@ -74,6 +74,7 @@ typedef struct {
 
 typedef struct {
     Texture test;
+    Texture big_one;
     Texture styxel;
     Texture styxel_8x8;
     Texture sb_16x16;
@@ -136,9 +137,11 @@ typedef struct {
 typedef struct {
     Mesh axis_arrow;
     Mesh ring;
+    Mesh circle;
     Mesh rectangle;
     Mesh font_rectangle;
     Mesh cube;
+    Mesh sphere;
     Mesh tetrahedron;
 } GeometryPrimitives;
 
@@ -166,7 +169,7 @@ WindowInfo window_info = {
     .width           = 800,
     .height          = 600,
     .vsync           = 1,
-    .show_debug_info = 1,
+    .show_debug_info = 0,
 };
 
 Camera camera = {
@@ -206,12 +209,14 @@ void clamp_f32(f32* x, f32 low, f32 high) {
 /* ==== Waves ==== */
 
 // todo: maybe slower than state machine?
-float triangle_wave(float in) {
-    const float f = 4 / TAU;
+f32 triangle_wave(f32 in) {
+    const f32 f = 4 / TAU;
     return f * asinf(sinf(in));
 }
 
-
+f32 sin_normalize(f32 in) {
+    return (1 + sinf(in)) / 2;
+}
 
 
 
@@ -259,14 +264,12 @@ void GL_print_debug_message(
 
 /* ==== Renderer: Utilities ==== */
 
-void update_FPS_string(Timer* t, f64 dt, String* s) {
+void update_FPS_timer(Timer* t, f64 dt) {
 
     t->base    += dt;
     t->counter += t->interval;
     
     if (t->base >= t->interval) {
-        f64 v = t->counter / t->base / t->interval;
-        s->count   = snprintf((char*) s->data, s->count, "Frametime: %fms  FPS: %f", 1000 / v, v);
         t->base    = 0;
         t->counter = 0;
     }
@@ -396,7 +399,7 @@ void draw_axis_arrow(Vector3 scale, Camera* cam) {
 }
 
 // todo: how should we do offset?
-void draw_ring(Vector2 scale, Vector4 color) {
+void draw_ring(Vector2 scale, f32 line_width, Vector4 color) {
     
     Mesh* mesh = &geometry_primitives.ring;
 
@@ -416,13 +419,40 @@ void draw_ring(Vector2 scale, Vector4 color) {
 
     glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m);
     
-    glLineWidth(2);
-    glDrawElements(GL_LINES, 60, GL_UNSIGNED_INT, NULL);
+    glLineWidth(line_width);
+    glDrawElements(GL_LINES, 72, GL_UNSIGNED_INT, NULL);
     glLineWidth(1);
 
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
 }
+
+void draw_circle(Vector2 scale, Vector4 color) {
+    
+    Mesh* mesh = &geometry_primitives.circle;
+
+    Matrix2 m = m2_scale((Vector2) {1 / window_info.aspect, 1});
+    m = m2_mul(m2_scale(scale), m);
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA);
+
+    glUseProgram(mesh->id.shader); 
+    glBindVertexArray(mesh->id.vertex_array);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
+ 
+    glUniform4fv(glGetUniformLocation(mesh->id.shader, "color"), 1, (f32*) &color);
+    glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m);
+    
+    glDrawElements(GL_TRIANGLES, 36 * 3, GL_UNSIGNED_INT, NULL);
+
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+}
+
+
 
 // todo: how should we do offset?
 void draw_rect(Matrix2* m, int count, Vector4 color) {
@@ -450,7 +480,7 @@ void draw_rect(Matrix2* m, int count, Vector4 color) {
 }
 
 // todo: texture leak bug, one more character? why does this show empty line?
-void draw_string(Vector2 position, Vector2 scale, String s) {
+void draw_string(Vector2 position, Vector2 scale, Vector4 color, String s) {
     
     Mesh* mesh = &geometry_primitives.font_rectangle;
     
@@ -475,6 +505,7 @@ void draw_string(Vector2 position, Vector2 scale, String s) {
  
     glUniform1i(glGetUniformLocation(mesh->id.shader, "texture0"), 0);
     glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m);
+    glUniform4fv(glGetUniformLocation(mesh->id.shader, "color"), 1, (f32*) &color);
    
     for (int i = 0; i < s.count; i++) {
     
@@ -497,28 +528,6 @@ void draw_string(Vector2 position, Vector2 scale, String s) {
 }
 
 
-// todo: off pixel looks ugly
-void draw_cursor() {
-    Matrix2 screen = m2_scale((Vector2) {1 / window_info.aspect, 1});
-    Matrix2 cursor[2] = {
-        m2_mul(screen, m2_scale((Vector2) {0.005, 0.05})),
-        m2_mul(screen, m2_scale((Vector2) {0.05, 0.005})),
-    }; 
-    draw_rect(cursor, 2, (Vector4) {1, 1, 1, 0.5});
-}
-
-// todo: this is very crappy
-void draw_circle() {
-    Matrix2 screen = m2_scale((Vector2) {1 / window_info.aspect, 1});
-    Matrix2 cursor[16];
-    
-    for (int i = 0; i < 16; i++) {
-        Matrix2 m = m2_mul(m2_rotate(TAU / 32 * i), m2_scale((Vector2) {0.01, 0.01}));
-        cursor[i] = m2_mul(screen, m);
-    }; 
-
-    draw_rect(cursor, 16, (Vector4) {1, 1, 1, 0.5});
-}
 
 // todo: how to handle other shaders?
 void draw_model(Model3D* model, int count, Camera* cam) {
@@ -556,7 +565,7 @@ void draw_model(Model3D* model, int count, Camera* cam) {
 
 /* ==== Resource Loading ==== */
 
-#define make_mesh_from_stack_data(mesh, v, i, va, Vertex_Type, shader, texture) make_mesh(mesh, (f32*) v, i, va, length_of(v), length_of(i), length_of(va), sizeof(Vertex_Type), shader, texture)
+#define make_mesh_from_stack_data(mesh, v, i, va, Vertex_Type, shader, texture) make_mesh(mesh, (f32*) v, i, va, length_of(v), length_of(i), length_of(va), sizeof(Vertex_Type), shader, texture, 1)
 void make_mesh(
     Mesh* mesh, 
     f32*  vertices, 
@@ -567,15 +576,25 @@ void make_mesh(
     u32   vertex_array_structure_count,
     u64   vertex_size, 
     u32   shader,
-    u32   texture
+    u32   texture,
+    u8    is_stack_data
 ) {
-
-    mesh->vertex_data       = malloc(vertex_size * vertex_count);
-    mesh->indices           = malloc(sizeof(u32) * index_count);
+    
+    if (is_stack_data) {
+        mesh->vertex_data = malloc(vertex_size * vertex_count);
+        mesh->indices     = malloc(sizeof(u32) * index_count);
+    } else {
+        mesh->vertex_data = vertices;
+        mesh->indices     = indices;
+    }
+   
     mesh->vertex_data_count = vertex_count * vertex_size / sizeof(f32);
     mesh->index_count       = index_count;  
-    memcpy(mesh->vertex_data, vertices, vertex_size * vertex_count); 
-    memcpy(mesh->indices,     indices,  sizeof(u32) * index_count); 
+    
+    if (is_stack_data) {
+        memcpy(mesh->vertex_data, vertices, vertex_size * vertex_count); 
+        memcpy(mesh->indices,     indices,  sizeof(u32) * index_count); 
+    }
     
     mesh->id.shader  = shader;
     mesh->id.texture = texture;
@@ -866,6 +885,7 @@ void setup(int arg_count, char** args) {
 
             stbi_set_flip_vertically_on_load(1);
             t->test       = load_texture("data/bitmaps/test.png", 4);
+            t->big_one    = load_texture("data/bitmaps/big_one.png", 4);
             t->styxel     = load_texture("data/fonts/styxel.png", 4);
             t->styxel_8x8 = load_texture("data/fonts/styxel_8x8.png", 4);
             t->sb_16x16   = load_texture("data/fonts/sb_16x16.png", 4);
@@ -938,24 +958,71 @@ void setup(int arg_count, char** args) {
             Vector2 pos;
         } Vertex;
         
-        u32 va[] = {2};
+        u32 vertex_structure[] = {2};
 
-        Vertex v[30];
-        for (int i = 0; i < 30; i++) {
-            f32 rad  = TAU * i / 30.0;
-            v[i].pos = (Vector2) {cosf(rad), sinf(rad)};
+        const u32 edge_count   = 36;
+        
+        u32 vertex_count = edge_count;
+        u32 index_count  = edge_count * 2;
+        Vertex* vertices = malloc(sizeof(Vertex) * vertex_count); 
+        u32*    indices  = malloc(sizeof(u32)    * index_count); 
+
+        for (int i = 0; i < vertex_count; i++) {
+            f32 rad  = TAU * i / (f32) edge_count;
+            vertices[i].pos = (Vector2) {cosf(rad), sinf(rad)};
         }
 
-        u32 i[60];
-        for (int j = 0; j < 29; j++) {
-            i[j * 2 + 0] = j;
-            i[j * 2 + 1] = j + 1;
+        for (int i = 0; i < edge_count - 1; i++) {
+            indices[i * 2 + 0] = i;
+            indices[i * 2 + 1] = i + 1;
         }
+        indices[70] = 35;
+        indices[71] = 0;
 
-        i[58] = 29;
-        i[59] = 0;
+        make_mesh(
+            &geometry_primitives.ring,
+            (f32*) vertices, indices, vertex_structure,
+            vertex_count, index_count, length_of(vertex_structure), 
+            sizeof(Vertex), asset_shaders.rect, 0, 0
+        );
+    }
 
-        make_mesh_from_stack_data(&geometry_primitives.ring, v, i, va, Vertex, asset_shaders.rect, 0);
+    // Circle 2D
+    {
+        typedef struct {
+            Vector2 pos;
+        } Vertex;
+        
+        u32 vertex_structure[] = {2};
+        
+        const u32 edge_count = 36;
+
+        u32 vertex_count = edge_count + 1;
+        u32 index_count  = edge_count * 3;
+
+        Vertex* vertices = malloc(sizeof(Vertex) * vertex_count); 
+        u32*    indices  = malloc(sizeof(u32)    * index_count);
+
+        for (int i = 1; i < vertex_count; i++) {
+            f32 rad = TAU * i / (f32) edge_count;
+            vertices[i].pos = (Vector2) {cosf(rad), sinf(rad)};
+        }
+        
+        for (int j = 0; j < edge_count; j++) {
+            indices[j * 3 + 0] = 0;
+            indices[j * 3 + 1] = j + 1;
+            indices[j * 3 + 2] = j + 2;
+        }
+        
+        vertices[0].pos = (Vector2) {0, 0};
+        indices[edge_count * 3 - 1] = 1;
+
+        make_mesh(
+            &geometry_primitives.circle,
+            (f32*) vertices, indices, vertex_structure,
+            vertex_count, index_count, length_of(vertex_structure), 
+            sizeof(Vertex), asset_shaders.rect, 0, 0
+        );
     }
 
     // Rectangle
@@ -1013,8 +1080,8 @@ void setup(int arg_count, char** args) {
     {
         typedef struct {
             Vector3 pos;
-            struct {f32 u, v;} uv;
-            struct {f32 r, g, b;} color;
+            Vector2 uv;
+            Vector3 color;
         } Vertex;
 
         f32 s = 0.5; // will get a 1 * 1 * 1 cube, center at 0, 0, 0
@@ -1048,8 +1115,8 @@ void setup(int arg_count, char** args) {
     {
         typedef struct {
             Vector3 pos;
-            struct {f32 u, v;} uv;
-            struct {f32 r, g, b;} color;
+            Vector2 uv;
+            Vector3 color;
         } Vertex;
 
         f32 sv = 0.866025; // sqrt(0.75), sqrt(size^2 + (size/2)^2) = sqrt(0.75) * size
@@ -1073,6 +1140,59 @@ void setup(int arg_count, char** args) {
         
         make_mesh_from_stack_data(&geometry_primitives.tetrahedron, v, i, va, Vertex, asset_shaders.cube, asset_textures.test.id);
     }
+    
+
+    // todo: make this work
+    // Sphere 
+    {
+        typedef struct {
+            Vector3 pos;
+            Vector2 uv;
+            Vector3 color;
+        } Vertex;
+
+        f32 s = 0.5; // will get a 1 * 1 * 1 sphere, center at 0, 0, 0
+        
+        u32 va[] = {3, 2, 3};
+        
+        Vertex v[] = {
+            {{-s, -s, -s}, {0, 0}, {1, 0, 0}}, 
+            {{ s, -s, -s}, {1, 0}, {0, 1, 0}},
+            {{ s,  s, -s}, {1, 1}, {0, 0, 1}},
+            {{-s,  s, -s}, {0, 1}, {1, 1, 1}},
+            {{-s, -s,  s}, {0, 0}, {0, 1, 1}},
+            {{ s, -s,  s}, {1, 0}, {1, 0, 1}},
+            {{ s,  s,  s}, {1, 1}, {1, 1, 0}},
+            {{-s,  s,  s}, {0, 1}, {0, 0, 0}},
+        };
+
+        u32 i[] = {
+            3, 2, 1, 3, 1, 0,
+            4, 5, 6, 4, 6, 7,
+            0, 1, 5, 0, 5, 4,
+            1, 2, 6, 1, 6, 5,
+            2, 3, 7, 2, 7, 6,
+            3, 0, 4, 3, 4, 7,
+        };
+        
+        make_mesh(
+            &geometry_primitives.sphere,
+            (f32*) v,
+            i,
+            va,
+            length_of(v),
+            length_of(i),
+            length_of(va),
+            sizeof(Vertex),
+            asset_shaders.cube,
+            asset_textures.test.id,
+            1
+        );
+
+        //make_mesh_from_stack_data(&geometry_primitives.sphere, v, i, va, Vertex, asset_shaders.cube, asset_textures.test.id);
+    }
+
+
 }
 
 

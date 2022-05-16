@@ -85,6 +85,14 @@ const Matrix4 M4_IDENTITY = {
 
 /* ==== Vector and Matrix ==== */
 
+Vector2 v2_add(Vector2 a, Vector2 b) {
+    return (Vector2) {a.x + b.x, a.y + b.y};
+}
+
+Vector2 v2_sub(Vector2 a, Vector2 b) {
+    return (Vector2) {a.x - b.x, a.y - b.y};
+}
+
 Vector3 v3_reverse(Vector3 v) {
     return (Vector3) {-v.x, -v.y, -v.z};
 }

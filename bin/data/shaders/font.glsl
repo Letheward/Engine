@@ -28,10 +28,11 @@ void main() {
 #version 330 core
 
 uniform sampler2D texture0;
+uniform vec4 color;
 
 in vec2 uv;
 out vec4 out_color;
 
 void main() {
-    out_color = texture(texture0, uv);
+    out_color = texture(texture0, uv) * color;
 }
