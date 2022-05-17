@@ -213,20 +213,6 @@ void clamp_f32(f32* x, f32 low, f32 high) {
 }
 
 
-String temp_print(char* s, ...) {
-    
-    va_list va;
-    va_start(va, s);
-    
-    u64 count  = vsnprintf(0, 0, s, va);
-    String out = {temp_alloc(count + 1), count};
-    vsnprintf((char*) out.data, count + 1, s, va);
-
-    return out;
-}
-
-
-
 
 
 

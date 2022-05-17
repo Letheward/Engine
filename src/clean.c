@@ -187,12 +187,25 @@ u64 builder_append(StringBuilder* b, String s) {
 
 
 
+
 /* ==== String ==== */ 
 
 void print(String s) {
     for (u64 i = 0; i < s.count; i++) {
         putchar(s.data[i]);
     }
+}
+
+String temp_print(char* s, ...) {
+    
+    va_list va;
+    va_start(va, s);
+    
+    u64 count  = vsnprintf(0, 0, s, va);
+    String out = {temp_alloc(count + 1), count};
+    vsnprintf((char*) out.data, count + 1, s, va);
+
+    return out;
 }
 
 String find(String a, String b) {
