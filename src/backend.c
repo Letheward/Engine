@@ -74,7 +74,8 @@ typedef struct {
 
 typedef struct {
     Texture test;
-    Texture big_one;
+    Texture sun;
+    Texture stairway;
     Texture styxel;
     Texture styxel_8x8;
     Texture sb_16x16;
@@ -110,6 +111,15 @@ typedef struct {
     Entity3D base;
     Mesh*    mesh;
 } Model3D;
+
+// Experiment: Gravity
+typedef struct {
+    Entity3D base;
+    Vector3  velocity;
+    f32      mass;
+    Mesh*    mesh;
+} CelestialBody;
+
 
 typedef struct {
     
@@ -161,7 +171,8 @@ GeometryPrimitives geometry_primitives;
 Asset_Shaders      asset_shaders;
 Asset_Textures     asset_textures;
 
-f32 engine_speed_scale = 1.0;
+f32 engine_speed_scale   = 1.0;
+f32 movement_speed_scale = 1.0;
 
 WindowInfo window_info = {
     .width           = 800,
@@ -200,6 +211,21 @@ void clamp_f32(f32* x, f32 low, f32 high) {
     if (*x < low ) *x = low;
     if (*x > high) *x = high;
 }
+
+
+String temp_print(char* s, ...) {
+    
+    va_list va;
+    va_start(va, s);
+    
+    u64 count  = vsnprintf(0, 0, s, va);
+    String out = {temp_alloc(count + 1), count};
+    vsnprintf((char*) out.data, count + 1, s, va);
+
+    return out;
+}
+
+
 
 
 
@@ -351,6 +377,12 @@ void change_engine_speed(f32 scale) {
     logprint("[Engine] Speed Scale: %f\n", engine_speed_scale);
 }
 
+void change_movement_speed(f32 scale) {
+    movement_speed_scale *= scale;
+    logprint("[Engine] Movement Speed Scale: %f\n", movement_speed_scale);
+}
+
+
 
 
 
@@ -404,7 +436,7 @@ void draw_ring(Vector2 scale, f32 line_width, Vector4 color) {
 
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glUseProgram(mesh->id.shader); 
     glBindVertexArray(mesh->id.vertex_array);
@@ -432,7 +464,7 @@ void draw_circle(Vector2 scale, Vector4 color) {
 
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glUseProgram(mesh->id.shader); 
     glBindVertexArray(mesh->id.vertex_array);
@@ -485,14 +517,14 @@ void draw_string(Vector2 position, Vector2 scale, Vector4 color, String s) {
 
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
  
     glUseProgram(mesh->id.shader); 
     glBindVertexArray(mesh->id.vertex_array);
     glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
  
-    glBindTexture(GL_TEXTURE_2D, asset_textures.styxel.id);
+    glBindTexture(GL_TEXTURE_2D, asset_textures.sb_16x16.id);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -523,10 +555,46 @@ void draw_string(Vector2 position, Vector2 scale, Vector4 color, String s) {
     glEnable(GL_DEPTH_TEST);
 }
 
+// todo: figure out offset
+void draw_string_shadowed(Vector2 position, Vector2 offset, Vector2 scale, Vector4 fg_color, Vector4 bg_color, String s) {
+    draw_string(v2_add(position, offset), scale, bg_color, s);
+    draw_string(position,                 scale, fg_color, s);
+}
+
+
 
 
 // todo: how to handle other shaders?
 void draw_model(Model3D* model, int count, Camera* cam) {
+    
+    Mesh* mesh = model->mesh; 
+
+    glUseProgram(mesh->id.shader); 
+    glBindVertexArray(mesh->id.vertex_array);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
+    
+    glBindTexture(GL_TEXTURE_2D, mesh->id.texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i(glGetUniformLocation(mesh->id.shader, "texture0"), 0);
+    
+    glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "projection"), 1, GL_FALSE, (f32*) &cam->projection);
+    glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "view"), 1, GL_FALSE, (f32*) &cam->view);
+    
+    for (int i = 0; i < count; i++) {
+        Matrix4 m = entity_to_m4(model[i].base);
+        glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "model"), 1, GL_FALSE, (f32*) &m);
+        glDrawElements(cam->draw_mode, mesh->index_count, GL_UNSIGNED_INT, NULL);
+    }
+}
+
+
+// todo: how to handle other shaders?
+void draw_body(CelestialBody* model, int count, Camera* cam) {
     
     Mesh* mesh = model->mesh; 
 
@@ -617,290 +685,7 @@ void make_mesh(
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh->index_count * sizeof(u32), mesh->indices, GL_DYNAMIC_DRAW);
 }
 
-
-// todo: only handle RGBA now
-Texture load_texture(char* path, int channel) {
-
-    Texture t; 
-
-    t.data    = stbi_load(path, &t.w, &t.h, NULL, channel);
-    t.channel = channel;
-    if (!t.data) error("[Texture] Cannot load %s\n", path);
-
-    glGenTextures(1, &t.id);
-    glBindTexture(GL_TEXTURE_2D, t.id);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, t.w, t.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, t.data);
-    
-    logprint("[Texture] Loaded %s\n", path);
-
-    return t;
-}
-
-void unload_texture(Texture* t) {
-    stbi_image_free(t->data);
-    free(t);
-}
-
-
-u32 compile_shader(char* path) {
-           
-    typedef struct {
-        char* tag;
-        u32   type;
-    } TypeTag;
-
-    const TypeTag tags[] = {
-        {"[vert]", GL_VERTEX_SHADER},
-        {"[frag]", GL_FRAGMENT_SHADER},
-        {"[geom]", GL_GEOMETRY_SHADER},
-        {"[comp]", GL_COMPUTE_SHADER},
-        {"[eval]", GL_TESS_EVALUATION_SHADER},
-        {"[ctrl]", GL_TESS_CONTROL_SHADER},
-    };
-
-    u32 shader = glCreateProgram();
-
-    void* (*old_alloc)(u64) = runtime.alloc;
-    runtime.alloc = temp_alloc;
-    char* code = load_file_as_c_string(path);
-    runtime.alloc = old_alloc;
- 
-    if (!code) return 0;
-
-    char* ps[6];
-    for (int i = 0; i < 6; i++) ps[i] = strstr(code, tags[i].tag); // find the tags
-    for (int i = 0; i < 6; i++) {
-        if (ps[i]) {
-            *ps[i] = '\0'; // "cut" the string (if only GL takes string view...)
-            ps[i] += 8;    // get string starting point without tag
-        }
-    }
-
-    for (int i = 0; i < 6; i++) {
-
-        if (ps[i]) {
-
-            u32 id = glCreateShader(tags[i].type);
-            int success;
-            int length;
-
-            glShaderSource(id, 1, (const char**) &ps[i], NULL);
-            glCompileShader(id);
-            glGetShaderiv(id, GL_COMPILE_STATUS, &success);
-            glGetShaderiv(id, GL_INFO_LOG_LENGTH, &length);
-
-            if (!success) {
-                char* message = temp_alloc(length);
-                glGetShaderInfoLog(id, length, &length, message);
-                error("[GLSL] In tag %s of %s: %s", tags[i].tag, path, message);
-                return 0;
-            }
-
-            glAttachShader(shader, id);
-            glDeleteShader(id); // maybe pointless, since it will only be deleted when detached
-        }
-    }
-
-    glLinkProgram(shader);
-    glValidateProgram(shader);
-
-    logprint("[GLSL] Compiled %s\n", path);
-
-    return shader;
-}
-
-void save_position() {
-    logprint("[Save] Position Saved.\n");
-    save_file(data_string(camera), "data/save/game.pos");
-}
-
-void load_position(Camera* cam) {
-
-    char* path = "data/save/game.pos"; 
-    FILE* f = fopen(path, "rb");
-    if (!f) goto fail;  
-
-    u8* data;
-    u64 count;
-
-    fseek(f, 0, SEEK_END);
-    count = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    if (!count || count != sizeof(Camera)) goto fail;
-
-    data = temp_alloc(count);
-    fread(data, 1, count, f);
-    fclose(f);
-
-    *cam = *(Camera*) data;
-    logprint("[Save] Position loaded.\n");
-    return;
-
-    fail:
-    logprint("[Save] [Warning] Cannot Load position, use default.\n");
-}
-
-
-
-
-
-
-/* ==== Input ==== */
-
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-
-    if (action == GLFW_PRESS) {
-        switch (key) {
-            case GLFW_KEY_ESCAPE: glfwSetWindowShouldClose(window, 1); break;
-            case GLFW_KEY_F1:     toggle_vsync(); break;
-            case GLFW_KEY_F2:     toggle_cursor(); break;
-            case GLFW_KEY_F3:     toggle_debug_info(); break;
-            case GLFW_KEY_F11:    toggle_fullscreen(); break;
-            case GLFW_KEY_Z:      change_draw_mode(-1); break;
-            case GLFW_KEY_X:      change_draw_mode(1); break;
-            case GLFW_KEY_UP:     change_engine_speed(2); break;
-            case GLFW_KEY_DOWN:   change_engine_speed(0.5); break;
-        }
-    }
-}
-
-void scroll_callback(GLFWwindow* window, f64 dx, f64 dy) {
-    camera.FOV += (int) dy;
-    clamp_s32(&camera.FOV, 1, 179);
-    update_camera_projection(&camera);
-}
-
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
-
-    if (action == GLFW_PRESS) {
-        switch (button) {
-            case GLFW_MOUSE_BUTTON_MIDDLE: {
-                camera.FOV = 70;
-                update_camera_projection(&camera);
-                break;
-            }
-        }
-    }
-}
-
-
-
-
-
-/* ==== Setup ==== */
-
-void setup(int arg_count, char** args) {
-
-
-    /* ---- Setup Runtime ---- */
-    {
-        u64 size = 1024 * 256;
-        runtime.temp_buffer.data = calloc(size, sizeof(u8));
-        runtime.temp_buffer.size = size;
-        runtime.alloc    = malloc;
-        runtime.log_file = stdout;
-        
-        runtime.command_line_args = (Array(String)) {
-            .data  = malloc(sizeof(String) * arg_count),
-            .count = arg_count,
-        };
-
-        for (int i = 0; i < arg_count; i++) {
-            String* s = &runtime.command_line_args.data[i];
-            s->data  = (u8*) args[i];
-            s->count = strlen(args[i]);
-        }
-    }
-   
-
-    /* ---- Init Window and OpenGL ---- */
-
-    {
-        WindowInfo* w = &window_info;
-        setvbuf(stdout, NULL, _IONBF, 0); // C, why???
-
-        glfwInit();
-
-        // use OpenGL core
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-        
-        // glfwWindowHint(GLFW_SAMPLES, 4); // anti-aliasing
-
-        // set window and load OpenGL functions
-        w->handle = glfwCreateWindow(w->width, w->height, "Engine", NULL, NULL);
-        glfwMakeContextCurrent(w->handle);
-        glfwSetFramebufferSizeCallback(w->handle, resize_framebuffer);
-        glfwSetKeyCallback(w->handle, key_callback);
-        glfwSwapInterval(w->vsync);
-        glfwSetInputMode(w->handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        glfwSetScrollCallback(w->handle, scroll_callback);
-        glfwSetMouseButtonCallback(w->handle, mouse_button_callback);
-
-        if (glfwRawMouseMotionSupported()) {
-            glfwSetInputMode(w->handle, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
-        }
-
-        gladLoadGL();
-        glEnable(GL_DEPTH_TEST);
-        glEnable(GL_PROGRAM_POINT_SIZE);
-
-        w->is_first_frame = 1;
-        camera.view = M4_IDENTITY;
-        resize_framebuffer(w->handle, w->width, w->height);
-    }
-
-
-    /* ---- Setup Debug (comment out to disable) ---- */
-
-    {
-        glEnable(GL_DEBUG_OUTPUT);
-        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-        glDebugMessageCallback(GL_print_debug_message, NULL);
-        logprint(
-            "[OpenGL] Vendor:         %s\n"
-            "[OpenGL] Renderer:       %s\n"
-            "[OpenGL] OpenGL Version: %s\n"
-            "[OpenGL] GLSL Version:   %s\n",
-            glGetString(GL_VENDOR),
-            glGetString(GL_RENDERER),
-            glGetString(GL_VERSION),
-            glGetString(GL_SHADING_LANGUAGE_VERSION)
-        );
-    }
-
-
-    /* ---- Load Resources ---- */
-
-    {
-        // Load All Textures 
-        {
-            Asset_Textures* t = &asset_textures;
-
-            stbi_set_flip_vertically_on_load(1);
-            t->test       = load_texture("data/bitmaps/test.png", 4);
-            t->big_one    = load_texture("data/bitmaps/big_one.png", 4);
-            t->styxel     = load_texture("data/fonts/styxel.png", 4);
-            t->styxel_8x8 = load_texture("data/fonts/styxel_8x8.png", 4);
-            t->sb_16x16   = load_texture("data/fonts/sb_16x16.png", 4);
-        }
-
-        // Compile All Shaders 
-        {
-            Asset_Shaders* s = &asset_shaders;
-
-            s->cube = compile_shader("data/shaders/cube.glsl");
-            s->rect = compile_shader("data/shaders/rect.glsl");
-            s->axis = compile_shader("data/shaders/axis.glsl");
-            s->font = compile_shader("data/shaders/font.glsl");
-
-        }
-
-        load_position(&camera);
-    }
-
+void make_geometry_primitives() {
 
 
     /* ---- Geometry Primitives ---- */
@@ -1104,7 +889,7 @@ void setup(int arg_count, char** args) {
             3, 0, 4, 3, 4, 7,
         };
 
-        make_mesh_from_stack_data(&geometry_primitives.cube, v, i, va, Vertex, asset_shaders.cube, asset_textures.test.id);
+        make_mesh_from_stack_data(&geometry_primitives.cube, v, i, va, Vertex, asset_shaders.cube, asset_textures.stairway.id);
     }
     
     // Tetrahedron
@@ -1137,7 +922,6 @@ void setup(int arg_count, char** args) {
         make_mesh_from_stack_data(&geometry_primitives.tetrahedron, v, i, va, Vertex, asset_shaders.cube, asset_textures.test.id);
     }
     
-    // todo: cleanup, figure out uv
     // Sphere 
     {
         typedef struct {
@@ -1158,7 +942,9 @@ void setup(int arg_count, char** args) {
         
         // fill vertices
         for (u32 i = 1; i < edges / 2; i++) {
+            
             f32 r1 = TAU * (0.25 - i / (f32) edges);
+            
             for (u32 j = 0; j < edges; j++) {
                 
                 f32 r2 = TAU * j / (f32) edges;
@@ -1167,14 +953,22 @@ void setup(int arg_count, char** args) {
                 f32 sr1 = sinf(r1);
                 f32 cr2 = cosf(r2);
                 f32 sr2 = sinf(r2);
+                
+                // final sphere angle output 
+                f32 cs  = cr2 * cr1;
+                f32 ss  = sr2 * cr1;
+                
+                // uv
+                f32 cuv = cs * 0.5 + 0.5;
+                f32 suv = ss * 0.5 + 0.5;
 
                 u32 pos = 1 + (i - 1) * edges + j;
-                vertices[pos] = (Vertex) {{cr2 * cr1, sr2 * cr1, sr1}, {cr2, sr1}, {1, 1, 1}};
+                vertices[pos] = (Vertex) {{cs, ss, sr1}, {cuv, suv}, {1, 1, 1}};
             }
         }
 
-        vertices[0               ] = (Vertex) {{0, 0,  1}, {0, 0}, {1, 1, 1}};
-        vertices[vertex_count - 1] = (Vertex) {{0, 0, -1}, {1, 1}, {1, 1, 1}};
+        vertices[0               ] = (Vertex) {{0, 0,  1}, {0.5, 0.5}, {1, 1, 1}};
+        vertices[vertex_count - 1] = (Vertex) {{0, 0, -1}, {0.5, 0.5}, {1, 1, 1}};
        
 
         u32 acc = 0;
@@ -1259,14 +1053,306 @@ void setup(int arg_count, char** args) {
             indices[acc + 2] = i1;
             acc += 3;
         }
-
+        
         make_mesh(
             &geometry_primitives.sphere,
             (f32*) vertices, indices,     vertex_structure,
             vertex_count,    index_count, length_of(vertex_structure), 
-            sizeof(Vertex), asset_shaders.cube, asset_textures.test.id, 0
+            sizeof(Vertex), asset_shaders.cube, asset_textures.stairway.id, 0
         );
     }
+}
+
+
+// todo: can only handle RGBA now
+Texture load_texture(char* path, int channel) {
+
+    Texture t; 
+    
+    t.data    = stbi_load(path, &t.w, &t.h, NULL, channel);
+    t.channel = channel;
+    if (!t.data) error("[Texture] Cannot load %s\n", path);
+
+    glGenTextures(1, &t.id);
+    glBindTexture(GL_TEXTURE_2D, t.id);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, t.w, t.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, t.data);
+    
+    logprint("[Texture] Loaded %s\n", path);
+
+    return t;
+}
+
+void unload_texture(Texture* t) {
+    stbi_image_free(t->data);
+    free(t);
+}
+
+
+u32 compile_shader(char* path) {
+           
+    typedef struct {
+        char* tag;
+        u32   type;
+    } TypeTag;
+
+    const TypeTag tags[] = {
+        {"[vert]", GL_VERTEX_SHADER},
+        {"[frag]", GL_FRAGMENT_SHADER},
+        {"[geom]", GL_GEOMETRY_SHADER},
+        {"[comp]", GL_COMPUTE_SHADER},
+        {"[eval]", GL_TESS_EVALUATION_SHADER},
+        {"[ctrl]", GL_TESS_CONTROL_SHADER},
+    };
+
+    u32 shader = glCreateProgram();
+
+    void* (*old_alloc)(u64) = runtime.alloc;
+    runtime.alloc = temp_alloc;
+    char* code = load_file_as_c_string(path);
+    runtime.alloc = old_alloc;
+ 
+    if (!code) return 0;
+
+    char* ps[6];
+    for (int i = 0; i < 6; i++) ps[i] = strstr(code, tags[i].tag); // find the tags
+    for (int i = 0; i < 6; i++) {
+        if (ps[i]) {
+            *ps[i] = '\0'; // "cut" the string (if only GL takes string view...)
+            ps[i] += 8;    // get string starting point without tag
+        }
+    }
+
+    for (int i = 0; i < 6; i++) {
+
+        if (ps[i]) {
+
+            u32 id = glCreateShader(tags[i].type);
+            int success;
+            int length;
+
+            glShaderSource(id, 1, (const char**) &ps[i], NULL);
+            glCompileShader(id);
+            glGetShaderiv(id, GL_COMPILE_STATUS, &success);
+            glGetShaderiv(id, GL_INFO_LOG_LENGTH, &length);
+
+            if (!success) {
+                char* message = temp_alloc(length);
+                glGetShaderInfoLog(id, length, &length, message);
+                error("[GLSL] In tag %s of %s: %s", tags[i].tag, path, message);
+                return 0;
+            }
+
+            glAttachShader(shader, id);
+            glDeleteShader(id); // maybe pointless, since it will only be deleted when detached
+        }
+    }
+
+    glLinkProgram(shader);
+    glValidateProgram(shader);
+
+    logprint("[GLSL] Compiled %s\n", path);
+
+    return shader;
+}
+
+void save_position() {
+    logprint("[Save] Position Saved.\n");
+    save_file(data_string(camera), "data/save/game.pos");
+}
+
+void load_position(Camera* cam) {
+
+    char* path = "data/save/game.pos"; 
+    FILE* f = fopen(path, "rb");
+    if (!f) goto fail;  
+
+    u8* data;
+    u64 count;
+
+    fseek(f, 0, SEEK_END);
+    count = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    if (!count || count != sizeof(Camera)) goto fail;
+
+    data = temp_alloc(count);
+    fread(data, 1, count, f);
+    fclose(f);
+
+    *cam = *(Camera*) data;
+    logprint("[Save] Position loaded.\n");
+    return;
+
+    fail:
+    logprint("[Save] [Warning] Cannot Load position, use default.\n");
+}
+
+
+
+
+
+
+/* ==== Input ==== */
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+
+    if (action == GLFW_PRESS) {
+        switch (key) {
+            case GLFW_KEY_ESCAPE: glfwSetWindowShouldClose(window, 1); break;
+            case GLFW_KEY_F1:     toggle_vsync(); break;
+            case GLFW_KEY_F2:     toggle_cursor(); break;
+            case GLFW_KEY_F3:     toggle_debug_info(); break;
+            case GLFW_KEY_F11:    toggle_fullscreen(); break;
+            case GLFW_KEY_Z:      change_draw_mode(-1); break;
+            case GLFW_KEY_X:      change_draw_mode(1); break;
+            case GLFW_KEY_DOWN:   change_engine_speed(0.5); break;
+            case GLFW_KEY_UP:     change_engine_speed(2); break;
+            case GLFW_KEY_LEFT:   change_movement_speed(0.5); break;
+            case GLFW_KEY_RIGHT:  change_movement_speed(2); break;
+        }
+    }
+}
+
+void scroll_callback(GLFWwindow* window, f64 dx, f64 dy) {
+    camera.FOV += (int) dy;
+    clamp_s32(&camera.FOV, 1, 179);
+    update_camera_projection(&camera);
+}
+
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+
+    if (action == GLFW_PRESS) {
+        switch (button) {
+            case GLFW_MOUSE_BUTTON_MIDDLE: {
+                camera.FOV = 70;
+                update_camera_projection(&camera);
+                break;
+            }
+        }
+    }
+}
+
+
+
+
+
+/* ==== Setup ==== */
+
+void setup(int arg_count, char** args) {
+
+
+    /* ---- Setup Runtime ---- */
+    {
+        u64 size = 1024 * 256;
+        runtime.temp_buffer.data = calloc(size, sizeof(u8));
+        runtime.temp_buffer.size = size;
+        runtime.alloc    = malloc;
+        runtime.log_file = stdout;
+        
+        runtime.command_line_args = (Array(String)) {
+            .data  = malloc(sizeof(String) * arg_count),
+            .count = arg_count,
+        };
+
+        for (int i = 0; i < arg_count; i++) {
+            String* s = &runtime.command_line_args.data[i];
+            s->data  = (u8*) args[i];
+            s->count = strlen(args[i]);
+        }
+    }
+   
+
+    /* ---- Init Window and OpenGL ---- */
+
+    {
+        WindowInfo* w = &window_info;
+//        setvbuf(stdout, NULL, _IONBF, 0); // C, why???
+
+        glfwInit();
+
+        // use OpenGL core
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        
+        glfwWindowHint(GLFW_SAMPLES, 4); // anti-aliasing
+
+        // set window and load OpenGL functions
+        w->handle = glfwCreateWindow(w->width, w->height, "Engine", NULL, NULL);
+        glfwMakeContextCurrent(w->handle);
+        glfwSetFramebufferSizeCallback(w->handle, resize_framebuffer);
+        glfwSetKeyCallback(w->handle, key_callback);
+        glfwSwapInterval(w->vsync);
+        glfwSetInputMode(w->handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        glfwSetScrollCallback(w->handle, scroll_callback);
+        glfwSetMouseButtonCallback(w->handle, mouse_button_callback);
+
+        if (glfwRawMouseMotionSupported()) {
+            glfwSetInputMode(w->handle, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+        }
+
+        gladLoadGL();
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_PROGRAM_POINT_SIZE);
+
+        w->is_first_frame = 1;
+        camera.view = M4_IDENTITY;
+        resize_framebuffer(w->handle, w->width, w->height);
+    }
+
+
+    /* ---- Setup Debug (comment out to disable) ---- */
+
+    {
+        glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        glDebugMessageCallback(GL_print_debug_message, NULL);
+        logprint(
+            "[OpenGL] Vendor:         %s\n"
+            "[OpenGL] Renderer:       %s\n"
+            "[OpenGL] OpenGL Version: %s\n"
+            "[OpenGL] GLSL Version:   %s\n",
+            glGetString(GL_VENDOR),
+            glGetString(GL_RENDERER),
+            glGetString(GL_VERSION),
+            glGetString(GL_SHADING_LANGUAGE_VERSION)
+        );
+    }
+
+
+    /* ---- Load Resources ---- */
+
+    {
+        // Load All Textures 
+        {
+            Asset_Textures* t = &asset_textures;
+
+            stbi_set_flip_vertically_on_load(1);
+            t->test       = load_texture("data/bitmaps/test.png", 4);
+            t->sun        = load_texture("data/bitmaps/sun.png", 4);
+            t->stairway   = load_texture("data/bitmaps/stairway.png", 4);
+            t->styxel     = load_texture("data/fonts/styxel_trans.png", 4);
+            t->styxel_8x8 = load_texture("data/fonts/styxel_8x8.png", 4);
+            t->sb_16x16   = load_texture("data/fonts/sb_16x16_trans.png", 4);
+        }
+
+        // Compile All Shaders 
+        {
+            Asset_Shaders* s = &asset_shaders;
+
+            s->cube = compile_shader("data/shaders/cube.glsl");
+            s->rect = compile_shader("data/shaders/rect.glsl");
+            s->axis = compile_shader("data/shaders/axis.glsl");
+            s->font = compile_shader("data/shaders/font.glsl");
+
+        }
+
+        make_geometry_primitives();
+        
+        load_position(&camera);
+    }
+
+
 }
 
 
@@ -1276,13 +1362,6 @@ void setup(int arg_count, char** args) {
 
 
 /* ---- Experiment: Gravity ---- */
-
-typedef struct {
-    Entity3D base;
-    Vector3  velocity;
-    float    mass;
-    Mesh*    mesh;
-} CelestialBody;
 
 const float G = 0.001;
 
@@ -1300,60 +1379,6 @@ void update_velocity(CelestialBody* b, Vector3 force, float dt) {
 void update_position(CelestialBody* b, float dt) {
     b->base.position = v3_add(b->base.position, v3_scale(b->velocity, dt));
 }
-
-
-
-
-// sample code, throw these to main to see
-/*/
-
-/ ---- setup ---- /
-
-CelestialBody bodies[256];
-
-// blackhole
-bodies[0] = (CelestialBody) {
-    .base = {
-        .position    = {0, 0, 0},
-        .scale       = {1, 1, 1}, 
-        .orientation = {1, 0, 0, 0},
-    },
-    .velocity = {0},
-    .mass     = 10000000000,   
-};
-
-for (int i = 1; i < length_of(bodies); i++) {
-    float b1 = rand() % 2 ? 1 : -1;
-    float b2 = rand() % 2 ? 1 : -1;
-    float b3 = rand() % 2 ? 1 : -1;
-    float v = 256;
-    bodies[i] = (CelestialBody) {
-        .base = {
-            .position    = {rand() % 1024 - 512, rand() % 1024 - 512, rand() % 1024 - 512},
-            .scale       = {rand() % 10, rand() % 10, rand() % 10},
-            .orientation = {1, 0, 0, 0},
-        },
-        .velocity = {rand() / v * b1, rand() / v * b2, rand() / v * b3},
-        .mass     = (rand() % 1000) * 100 + 10000,
-    };
-}
-
-/ ---- in simulate part of main loop ---- /
-// for (int i = 0; i < length_of(bodies); i++) {
-//     for (int j = 0; j < length_of(bodies); j++) {
-//         if (i >= j) continue;
-//         Vector3 v = get_gravity(bodies[i], bodies[j]);
-
-//         update_velocity(&bodies[i], v, dt);
-//         update_velocity(&bodies[j], v3_reverse(v), dt);
-//     }
-// }
-
-// for (int i = 0; i < length_of(bodies); i++) {
-//     update_position(&bodies[i], dt);
-// }
-// camera.position = v3_add(bodies[which_object].base.position, (Vector3) {0, 0, 10});
-/*/
 
 
 
@@ -1380,7 +1405,7 @@ void process_inputs(f64 dt) {
     Vector3 dv = {0};
     // Rotor3D dr = {1, 0, 0, 0}; // 3-way free camera
 
-    float factor = 10;
+    float factor = 10 * movement_speed_scale;
 
     if (glfwGetKey(w->handle, GLFW_KEY_D) == GLFW_PRESS) dv.x  =  dt * factor;
     if (glfwGetKey(w->handle, GLFW_KEY_A) == GLFW_PRESS) dv.x  = -dt * factor;

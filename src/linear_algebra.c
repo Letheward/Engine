@@ -97,6 +97,10 @@ Vector2 v2_sub(Vector2 a, Vector2 b) {
     return (Vector2) {a.x - b.x, a.y - b.y};
 }
 
+Vector2 v2_scale(Vector2 v, f32 s) {
+    return (Vector2) {v.x * s, v.y * s};
+}
+
 Vector3 v3_reverse(Vector3 v) {
     return (Vector3) {-v.x, -v.y, -v.z};
 }

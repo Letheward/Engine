@@ -34,5 +34,5 @@ in vec2 uv;
 out vec4 out_color;
 
 void main() {
-    out_color = texture(texture0, uv) * color;
+    out_color = vec4(color.rgb, texture(texture0, uv).a * color.a);
 }
