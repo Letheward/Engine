@@ -468,7 +468,7 @@ void draw_circle(Vector2 scale, Vector4 color) {
 
 
 
-// todo: how should we do offset?
+// todo: what's the better way to do offset?
 void draw_rect(Matrix2* m, int count, Vector4 color) {
     
     Mesh* mesh = &geometry_primitives.rectangle;
@@ -493,7 +493,8 @@ void draw_rect(Matrix2* m, int count, Vector4 color) {
     glEnable(GL_DEPTH_TEST);
 }
 
-// todo: texture leak bug, one more character? why does this show empty line?
+// todo: what's the better way to do offset?
+// todo: texture leak bug?
 void draw_string(Vector2 position, Vector2 scale, Vector4 color, String s) {
     
     Mesh* mesh = &geometry_primitives.font_rectangle;
@@ -541,7 +542,7 @@ void draw_string(Vector2 position, Vector2 scale, Vector4 color, String s) {
     glEnable(GL_DEPTH_TEST);
 }
 
-// todo: figure out offset
+// todo: figure out offset scaling
 void draw_string_shadowed(Vector2 position, Vector2 offset, Vector2 scale, Vector4 fg_color, Vector4 bg_color, String s) {
     draw_string(v2_add(position, offset), scale, bg_color, s);
     draw_string(position,                 scale, fg_color, s);
@@ -1050,7 +1051,7 @@ void make_geometry_primitives() {
 }
 
 
-// todo: can only handle RGBA now
+// todo: only handle RGBA now
 Texture load_texture(char* path, int channel) {
 
     Texture t; 
@@ -1103,7 +1104,7 @@ u32 compile_shader(char* path) {
     for (int i = 0; i < 6; i++) ps[i] = strstr(code, tags[i].tag); // find the tags
     for (int i = 0; i < 6; i++) {
         if (ps[i]) {
-            *ps[i] = '\0'; // "cut" the string (if only GL takes string view...)
+            *ps[i] = '\0'; // "cut" the string (works for now, maybe no need to switch to String)
             ps[i] += 8;    // get string starting point without tag
         }
     }
@@ -1252,7 +1253,7 @@ void setup(int arg_count, char** args) {
 
     {
         WindowInfo* w = &window_info;
-//        setvbuf(stdout, NULL, _IONBF, 0); // C, why???
+        setvbuf(stdout, NULL, _IONBF, 0); // force mitty to print immediately
 
         glfwInit();
 
@@ -1261,7 +1262,7 @@ void setup(int arg_count, char** args) {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         
-        glfwWindowHint(GLFW_SAMPLES, 4); // anti-aliasing
+        // glfwWindowHint(GLFW_SAMPLES, 4); // anti-aliasing
 
         // set window and load OpenGL functions
         w->handle = glfwCreateWindow(w->width, w->height, "Engine", NULL, NULL);
