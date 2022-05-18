@@ -59,29 +59,6 @@ typedef struct {
 } Texture;
 
 
-// global name binding
-
-typedef struct {
-   
-    u32 cube;
-    u32 rect;
-    u32 axis;
-    
-    u32 font;
-    u32 light;
-
-} Asset_Shaders;
-
-typedef struct {
-    Texture test;
-    Texture sun;
-    Texture stairway;
-    Texture styxel;
-    Texture styxel_8x8;
-    Texture sb_16x16;
-} Asset_Textures;
-
-
 
 
 /* ==== Entity ==== */
@@ -131,19 +108,54 @@ typedef struct {
     f32     zx;
     f32     xy;
     
-    int     draw_mode;   // temp, maybe remove this
-    
     // FOV
-    int     FOV;         // we may want f32, this is just for convenience
+    f32     FOV;         // we may want f32, this is just for convenience
     f32     near;
     f32     far;
 
     Matrix4 view;        // output of position & rotation
     Matrix4 projection;  // output of FOV, near, far
 
+    int     draw_mode;   // temp, maybe remove this
+
 } Camera;
 
-// global name binding
+
+
+
+
+
+
+
+
+
+
+/* ==== Global Data ==== */
+
+
+/* ---- Namespaced Bindings ---- */
+
+typedef struct {
+   
+    u32 cube;
+    u32 rect;
+    u32 axis;
+    
+    u32 font;
+    u32 light;
+
+} Asset_Shaders;
+
+typedef struct {
+    Texture test;
+    Texture sun;
+    Texture stairway;
+    Texture styxel;
+    Texture styxel_8x8;
+    Texture sb_16x16;
+    Texture wood;
+} Asset_Textures;
+
 typedef struct {
     Mesh axis_arrow;
     Mesh ring;
@@ -158,9 +170,7 @@ typedef struct {
 
 
 
-
-
-/* ==== Global Data ==== */
+/* ---- Data ---- */
 
 // stupid global variables to force laptop to use dedicated GPU
 // on linux these don't work and will break compilation
@@ -175,26 +185,30 @@ f32 engine_speed_scale   = 1.0;
 f32 movement_speed_scale = 1.0;
 
 WindowInfo window_info = {
-    .width           = 800,
-    .height          = 600,
+    .width           = 1280,
+    .height          = 720,
     .vsync           = 1,
     .show_debug_info = 0,
 };
 
 Camera camera = {
     
-    .position = {0, -10, 0},
+    .position    = {0, -10, 2},
     .orientation = R3D_DEFAULT,
     
     .yz = 0,
     .zx = 0,
     .xy = 0,
 
-    .FOV = 70,
+    .FOV  = 70,
     .near = 0.100000,
-    .far = 10000.000000,
-    .draw_mode = 4,
+    .far  = 10000.000000,
+
+    .draw_mode = GL_TRIANGLES,
 };
+
+
+Vector3 light; // temp
 
 
 
@@ -274,6 +288,13 @@ void GL_print_debug_message(
 
 /* ==== Renderer: Utilities ==== */
 
+Matrix4 entity_to_m4(Entity3D e) {
+    return m4_mul(
+        m4_translate(e.position),
+        m4_mul(r3d_to_m4(e.orientation), m4_scale(e.scale))
+    );
+}
+
 void update_FPS_timer(Timer* t, f64 dt) {
     t->base    += dt;
     t->counter += t->interval;
@@ -312,7 +333,6 @@ void toggle_debug_info() {
     WindowInfo* w = &window_info;
     w->show_debug_info = !w->show_debug_info;
 }
-
 
 // borderless fullscreen for now
 void toggle_fullscreen() {
@@ -368,19 +388,15 @@ void change_movement_speed(f32 scale) {
     logprint("[Engine] Movement Speed Scale: %f\n", movement_speed_scale);
 }
 
-
+void pause_or_continue() {
+    if (engine_speed_scale != 0) engine_speed_scale = 0;
+    else                         engine_speed_scale = 1;
+}
 
 
 
 
 /* ==== Renderer ==== */
-
-Matrix4 entity_to_m4(Entity3D e) {
-    return m4_mul(
-        m4_translate(e.position),
-        m4_mul(r3d_to_m4(e.orientation), m4_scale(e.scale))
-    );
-}
 
 void draw_axis_arrow(Vector3 scale, Camera* cam) {
 
@@ -511,7 +527,7 @@ void draw_string(Vector2 position, Vector2 scale, Vector4 color, String s) {
     glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
  
-    glBindTexture(GL_TEXTURE_2D, asset_textures.sb_16x16.id);
+    glBindTexture(GL_TEXTURE_2D, asset_textures.styxel.id);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -551,7 +567,7 @@ void draw_string_shadowed(Vector2 position, Vector2 offset, Vector2 scale, Vecto
 
 
 
-// todo: how to handle other shaders?
+// todo: how to handle other shaders? how to get light?
 void draw_model(Model3D* model, int count, Camera* cam) {
     
     Mesh* mesh = model->mesh; 
@@ -571,6 +587,7 @@ void draw_model(Model3D* model, int count, Camera* cam) {
     
     glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "projection"), 1, GL_FALSE, (f32*) &cam->projection);
     glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "view"), 1, GL_FALSE, (f32*) &cam->view);
+    glUniform3fv(glGetUniformLocation(mesh->id.shader, "light_pos"), 1, (f32*) &light);
     
     for (int i = 0; i < count; i++) {
         Matrix4 m = entity_to_m4(model[i].base);
@@ -580,7 +597,6 @@ void draw_model(Model3D* model, int count, Camera* cam) {
 }
 
 
-// todo: how to handle other shaders?
 void draw_body(CelestialBody* model, int count, Camera* cam) {
     
     Mesh* mesh = model->mesh; 
@@ -849,7 +865,7 @@ void make_geometry_primitives() {
         typedef struct {
             Vector3 pos;
             Vector2 uv;
-            Vector3 color;
+            Vector3 normal; // todo: cleanup
         } Vertex;
 
         u32 va[] = {3, 2, 3};
@@ -857,14 +873,14 @@ void make_geometry_primitives() {
         const f32 s = 0.5; // will get a 1 * 1 * 1 cube, center at 0, 0, 0
         
         Vertex v[] = {
-            {{-s, -s, -s}, {0, 0}, {1, 0, 0}}, 
-            {{ s, -s, -s}, {1, 0}, {0, 1, 0}},
-            {{ s,  s, -s}, {1, 1}, {0, 0, 1}},
-            {{-s,  s, -s}, {0, 1}, {1, 1, 1}},
-            {{-s, -s,  s}, {0, 0}, {0, 1, 1}},
-            {{ s, -s,  s}, {1, 0}, {1, 0, 1}},
-            {{ s,  s,  s}, {1, 1}, {1, 1, 0}},
-            {{-s,  s,  s}, {0, 1}, {0, 0, 0}},
+            {{-s, -s, -s}, {0, 0}, v3_normalize((Vector3) {-1, -1, -1})}, 
+            {{ s, -s, -s}, {1, 0}, v3_normalize((Vector3) { 1, -1, -1})},
+            {{ s,  s, -s}, {1, 1}, v3_normalize((Vector3) { 1,  1, -1})},
+            {{-s,  s, -s}, {0, 1}, v3_normalize((Vector3) {-1,  1, -1})},
+            {{-s, -s,  s}, {0, 0}, v3_normalize((Vector3) {-1, -1,  1})},
+            {{ s, -s,  s}, {1, 0}, v3_normalize((Vector3) { 1, -1,  1})},
+            {{ s,  s,  s}, {1, 1}, v3_normalize((Vector3) { 1,  1,  1})},
+            {{-s,  s,  s}, {0, 1}, v3_normalize((Vector3) {-1,  1,  1})},
         };
 
         u32 i[] = {
@@ -876,7 +892,7 @@ void make_geometry_primitives() {
             3, 0, 4, 3, 4, 7,
         };
 
-        make_mesh_from_stack_data(&geometry_primitives.cube, v, i, va, Vertex, asset_shaders.cube, asset_textures.stairway.id);
+        make_mesh_from_stack_data(&geometry_primitives.cube, v, i, va, Vertex, asset_shaders.cube, asset_textures.wood.id);
     }
     
     // Tetrahedron
@@ -884,7 +900,7 @@ void make_geometry_primitives() {
         typedef struct {
             Vector3 pos;
             Vector2 uv;
-            Vector3 color;
+            Vector3 normal; // todo: not done
         } Vertex;
 
         u32 va[] = {3, 2, 3};
@@ -914,7 +930,7 @@ void make_geometry_primitives() {
         typedef struct {
             Vector3 pos;
             Vector2 uv;
-            Vector3 color;
+            Vector3 normal; // todo: not done
         } Vertex;
         
         u32 vertex_structure[] = {3, 2, 3};
@@ -1045,7 +1061,7 @@ void make_geometry_primitives() {
             &geometry_primitives.sphere,
             (f32*) vertices, indices,     vertex_structure,
             vertex_count,    index_count, length_of(vertex_structure), 
-            sizeof(Vertex), asset_shaders.cube, asset_textures.stairway.id, 0
+            sizeof(Vertex), asset_shaders.cube, asset_textures.wood.id, 0
         );
     }
 }
@@ -1185,29 +1201,33 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
     if (action == GLFW_PRESS) {
         switch (key) {
+            
             case GLFW_KEY_ESCAPE: glfwSetWindowShouldClose(window, 1); break;
-            case GLFW_KEY_F1:     toggle_vsync(); break;
-            case GLFW_KEY_F2:     toggle_cursor(); break;
-            case GLFW_KEY_F3:     toggle_debug_info(); break;
-            case GLFW_KEY_F11:    toggle_fullscreen(); break;
-            case GLFW_KEY_Z:      change_draw_mode(-1); break;
-            case GLFW_KEY_X:      change_draw_mode(1); break;
-            case GLFW_KEY_DOWN:   change_engine_speed(0.5); break;
-            case GLFW_KEY_UP:     change_engine_speed(2); break;
+           
+            case GLFW_KEY_F1:     toggle_vsync();             break;
+            case GLFW_KEY_F2:     toggle_cursor();            break;
+            case GLFW_KEY_F3:     toggle_debug_info();        break;
+            case GLFW_KEY_F11:    toggle_fullscreen();        break;
+           
+            case GLFW_KEY_Z:      change_draw_mode(-1);       break;
+            case GLFW_KEY_X:      change_draw_mode(1);        break;
+
+            case GLFW_KEY_SPACE:  pause_or_continue();        break;
+            case GLFW_KEY_DOWN:   change_engine_speed(0.5);   break;
+            case GLFW_KEY_UP:     change_engine_speed(2);     break;
             case GLFW_KEY_LEFT:   change_movement_speed(0.5); break;
-            case GLFW_KEY_RIGHT:  change_movement_speed(2); break;
+            case GLFW_KEY_RIGHT:  change_movement_speed(2);   break;
         }
     }
 }
 
 void scroll_callback(GLFWwindow* window, f64 dx, f64 dy) {
-    camera.FOV += (int) dy;
-    clamp_s32(&camera.FOV, 1, 179);
+    camera.FOV += dy;
+    clamp_f32(&camera.FOV, 1, 179);
     update_camera_projection(&camera);
 }
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
-
     if (action == GLFW_PRESS) {
         switch (button) {
             case GLFW_MOUSE_BUTTON_MIDDLE: {
@@ -1262,7 +1282,7 @@ void setup(int arg_count, char** args) {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         
-        // glfwWindowHint(GLFW_SAMPLES, 4); // anti-aliasing
+        glfwWindowHint(GLFW_SAMPLES, 4); // anti-aliasing
 
         // set window and load OpenGL functions
         w->handle = glfwCreateWindow(w->width, w->height, "Engine", NULL, NULL);
@@ -1315,12 +1335,13 @@ void setup(int arg_count, char** args) {
             Asset_Textures* t = &asset_textures;
 
             stbi_set_flip_vertically_on_load(1);
-            t->test       = load_texture("data/bitmaps/test.png", 4);
-            t->sun        = load_texture("data/bitmaps/sun.png", 4);
-            t->stairway   = load_texture("data/bitmaps/stairway.png", 4);
-            t->styxel     = load_texture("data/fonts/styxel_trans.png", 4);
-            t->styxel_8x8 = load_texture("data/fonts/styxel_8x8.png", 4);
-            t->sb_16x16   = load_texture("data/fonts/sb_16x16_trans.png", 4);
+            t->test        = load_texture("data/bitmaps/test.png", 4);
+            t->sun         = load_texture("data/bitmaps/sun.png", 4);
+            t->stairway    = load_texture("data/bitmaps/stairway.png", 4);
+            t->wood        = load_texture("data/bitmaps/wood.jpg", 4); // todo: slow
+            t->styxel      = load_texture("data/fonts/styxel_trans.png", 4);
+            t->styxel_8x8  = load_texture("data/fonts/styxel_8x8.png", 4);
+            t->sb_16x16    = load_texture("data/fonts/sb_16x16_trans.png", 4);
         }
 
         // Compile All Shaders 
@@ -1338,8 +1359,6 @@ void setup(int arg_count, char** args) {
         
         load_position(&camera);
     }
-
-
 }
 
 

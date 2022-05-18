@@ -73,22 +73,81 @@ int main(int c_arg_count, char** c_args) {
 
     Model3D object = {
         .base = {
-            .position    = {0, 0, 4},
+            .position    = {0, 0, 0},
             .scale       = {2, 2, 2},
-            .orientation = {1, 0, 0, 0},
-        },
-        .mesh = &gp->sphere,
-    };
-    
-    Model3D room = {
-        .base = {
-            .position    = {0, 0, 10},
-            .scale       = {100, 100, 20},
             .orientation = {1, 0, 0, 0},
         },
         .mesh = &gp->cube,
     };
-
+ 
+    Model3D object2 = {
+        .base = {
+            .position    = {-2, -3, -5},
+            .scale       = {2, 2, 12},
+            .orientation = {1, 0, 0, 0},
+        },
+        .mesh = &gp->cube,
+    };
+ 
+    Model3D object3 = {
+        .base = {
+            .position    = {6, 0, -10},
+            .scale       = {10, 10, 6},
+            .orientation = {1, 0, 0, 0},
+        },
+        .mesh = &gp->cube,
+    };
+    
+    Model3D room[6] = {
+        {
+            .base = {
+                .position    = {0, 0, -10},
+                .scale       = {100, 100, 0.1},
+                .orientation = {1, 0, 0, 0},
+            },
+            .mesh = &gp->cube,
+        },
+        {
+            .base = {
+                .position    = {0, 0, 10},
+                .scale       = {100, 100, 0.1},
+                .orientation = {1, 0, 0, 0},
+            },
+            .mesh = &gp->cube,
+        },
+        {
+            .base = {
+                .position    = {-50, 0, 0},
+                .scale       = {0.1, 100, 20},
+                .orientation = {1, 0, 0, 0},
+            },
+            .mesh = &gp->cube,
+        },
+        {
+            .base = {
+                .position    = {50, 0, 0},
+                .scale       = {0.1, 100, 20},
+                .orientation = {1, 0, 0, 0},
+            },
+            .mesh = &gp->cube,
+        },
+        {
+            .base = {
+                .position    = {0, 50,  0},
+                .scale       = {100, 0.1, 20},
+                .orientation = {1, 0, 0, 0},
+            },
+            .mesh = &gp->cube,
+        },
+        {
+            .base = {
+                .position    = {0, -50,  0},
+                .scale       = {100, 0.1, 20},
+                .orientation = {1, 0, 0, 0},
+            },
+            .mesh = &gp->cube,
+        },
+    };
 
     /*/
     CelestialBody bodies[256];
@@ -157,8 +216,9 @@ int main(int c_arg_count, char** c_args) {
         
         f32 lerp_value          = sin_normalize(lerp_clock.base);
         object.base.orientation = nlerp_r3d(R3D_DEFAULT, r3d_from_plane_angle(B3_XY, TAU * 0.25), lerp_value);
-        object.base.position    = lerp_v3((Vector3) {0, 0, 3}, (Vector3) {0, 0, 4}, lerp_value);
-
+        object.base.position    = lerp_v3((Vector3) {0, 0, -5}, (Vector3) {0, 0, -3}, lerp_value);
+        
+        light = (Vector3) {cos(lerp_clock.base) * 20, sin(lerp_clock.base) * 20, 0};
         /*/
         for (int i = 0; i < length_of(bodies); i++) {
             for (int j = i + 1; j < length_of(bodies); j++) {
@@ -177,24 +237,32 @@ int main(int c_arg_count, char** c_args) {
         // render, todo: this is the most expensive part of the loop
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        
         // 3D        
-        draw_model(&room, 1, &camera);
+        draw_model(room, 6, &camera);
         draw_model(&object, 1, &camera);
+        draw_model(&object2, 1, &camera);
+        draw_model(&object3, 1, &camera);
 
 
         // 2D
         draw_string_shadowed(
-            (Vector2) {-0.45, 0.7},  
+            (Vector2) {-0.65, 0.7},  
             (Vector2) {0.006, -0.009}, 
             (Vector2) {0.1, 0.1}, 
             lerp_v4((Vector4) {0.5, 0.7, 0.95, 1}, (Vector4) {0.2, 0.8, 0.45, 1}, sin_normalize(text_pulse.base)),
             (Vector4) {0, 0, 0, 0.7}, 
-            string("Mono Font Works!")
+            string("WASD to move, QE to roll")
         );
 
+        draw_string_shadowed(
+            (Vector2) {-0.65, 0.5},  
+            (Vector2) {0.006, -0.009}, 
+            (Vector2) {0.1, 0.1}, 
+            lerp_v4((Vector4) {0.5, 0.7, 0.95, 1}, (Vector4) {0.2, 0.8, 0.45, 1}, sin_normalize(text_pulse.base)),
+            (Vector4) {0, 0, 0, 0.7}, 
+            string("ESC to exit")
+        );
+        
         if (window_info.show_debug_info) {
 
             String fps;
