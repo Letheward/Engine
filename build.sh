@@ -2,7 +2,7 @@
 name="game"
 src="src/main.c"
 dep="-I lib/hdr -L lib/"
-lin="-lglfw3 -lglad -lstbi -lgdi32"
+lin="-lglfw3 -lglad -lstb_image -lgdi32"
 opt="-O0"
 #con="-mwindows"
 etc="-std=c99 -Wall -pedantic -static"

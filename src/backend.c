@@ -408,11 +408,6 @@ void draw_axis_arrow(Vector3 scale, Camera* cam) {
     glBindVertexArray(mesh->id.vertex_array);
     glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
- 
-    glUseProgram(mesh->id.shader); 
-    glBindVertexArray(mesh->id.vertex_array);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
     
     Matrix4 m = m4_mul(m4_translate(position), m4_scale(scale));
     glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "projection"), 1, GL_FALSE, (f32*) &cam->projection);
@@ -514,7 +509,7 @@ void draw_rect(Matrix2* m, int count, Vector4 color) {
 void draw_string(Vector2 position, Vector2 scale, Vector4 color, String s) {
     
     Mesh* mesh = &geometry_primitives.font_rectangle;
-    
+
     Matrix2 m = m2_scale((Vector2) {1 / window_info.aspect, 1});
     m = m2_mul(m2_scale(scale), m);
 
@@ -717,7 +712,7 @@ void make_geometry_primitives() {
             Vector3 pos;
             Vector3 color;
         } Vertex;
-        
+
         u32 va[] = {3, 3};
 
         Vertex v[] = {
@@ -1282,7 +1277,7 @@ void setup(int arg_count, char** args) {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         
-        glfwWindowHint(GLFW_SAMPLES, 4); // anti-aliasing
+        // glfwWindowHint(GLFW_SAMPLES, 8); // anti-aliasing
 
         // set window and load OpenGL functions
         w->handle = glfwCreateWindow(w->width, w->height, "Engine", NULL, NULL);

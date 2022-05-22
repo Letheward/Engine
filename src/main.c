@@ -19,11 +19,182 @@
 #include "backend.c"
 
 
+// temp
+Vector2* test_vertices;
+u32      test_count;
+u32      test_shader;
+u32      test_vbo;
+u32      test_vao;
+
+
+
+void get_mesh_fonts() {
+    
+    int w;
+    int h;
+    
+    // switch the x y back (because stb flip it) and get rid of channels, just for convenience, maybe slow
+    u8* data;
+    {
+        Texture* t = &asset_textures.styxel;
+
+        w = t->w;
+        h = t->h;
+        data = malloc(w * h); 
+
+        u64 acc = 0;
+        for (int i = h - 1; i >= 0; i--) {
+            for (int j = 0; j < w * 4; j += 4) {
+                data[acc] = t->data[i * w * 4 + j];
+                acc++;
+            }
+        }
+    }
+
+    printf("w %d h %d\n", w, h);
+    
+    int char_w = 6;
+    int char_h = 6;
+    int x = 1;
+    int y = 2;
+    
+    u32 total_pixel_count = 0;
+
+    for (int i = y * char_h; i < (y + 1) * char_h; i++) {
+        for (int j = x * char_w; j < (x + 1) * char_w; j++) {
+            printf("%c", data[i * w + j] ? 'O' : ' ');
+            if (data[i * w + j]) total_pixel_count++;
+        }
+        printf("\n");
+    }
+    
+    printf("total pixel count %d\n", total_pixel_count);
+    
+    Vector2* vertices = malloc(sizeof(Vector2) * total_pixel_count * 6);
+    
+    
+    // todo: flip back now, so we can merge this with the flip above
+    u64 acc = 0;
+    for (int i = y * char_h; i < (y + 1) * char_h; i++) {
+        for (int j = x * char_w; j < (x + 1) * char_w; j++) {
+          
+            if (data[i * w + j]) {
+
+                Vector2 p0 = {
+                    ((j + 0) % char_w) / (f32) char_w, 
+                    1 - ((i + 0) % char_h) / (f32) char_h, 
+                };
+
+                Vector2 p3 = {
+                    (j % char_w + 1) / (f32) char_w, 
+                    1 - (i % char_h + 1) / (f32) char_h, 
+                };
+                
+                Vector2 p1 = {p3.x, p0.y};
+                Vector2 p2 = {p0.x, p3.y};
+/*/
+                print_v2(p0);
+                print_v2(p1);
+                print_v2(p2);
+                print_v2(p3);
+/*/
+
+                
+                vertices[acc + 0] = p2;
+                vertices[acc + 1] = p3;
+                vertices[acc + 2] = p1;
+                vertices[acc + 3] = p2;
+                vertices[acc + 4] = p1;
+                vertices[acc + 5] = p0;
+
+                acc += 6;
+                
+                /*/
+                f32 p0 = ((j + 0) % char_w) / (f32) char_w; 
+                f32 p1 = ((i + 0) % char_h) / (f32) char_h; 
+                f32 p2 = (j % char_w + 1  ) / (f32) char_w; 
+                f32 p3 = (i % char_h + 1  ) / (f32) char_h; 
+
+                printf("%f %f \n%f %f\n\n", p0, p1, p2, p3);
+                /*/
+
+//                printf("\n");
+            }
+            
+            //printf("%c", data[i * w + j] ? 'O' : ' ');
+        }
+ //       printf("\n");
+    }
+
+    test_vertices = vertices;
+    test_count    = total_pixel_count * 6;
+
+    free(data);
+
+
+    test_shader = asset_shaders.rect;
+
+    glGenBuffers(     1, &test_vbo);
+    glGenVertexArrays(1, &test_vao);
+
+    glUseProgram(test_shader); 
+    glBindBuffer(GL_ARRAY_BUFFER, test_vbo);
+    glBufferData(GL_ARRAY_BUFFER, test_count * sizeof(Vector2), (f32*) test_vertices, GL_DYNAMIC_DRAW);
+
+    glBindVertexArray(test_vao);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(f32), (void*) 0);
+    glEnableVertexAttribArray(0);
+}
+
+
+
+void draw_char_test() {
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA);
+
+    Vector4 color = {1, 1, 1, 1};
+    
+    Vector2 scale = {0.1, 0.1};
+    Matrix2 m = m2_scale((Vector2) {1 / window_info.aspect, 1});
+    m = m2_mul(m2_scale(scale), m);
+
+    u32 shader = test_shader;
+    glUseProgram(shader); 
+
+    glBindBuffer(GL_ARRAY_BUFFER, test_vbo);
+    glBindVertexArray(test_vao);
+
+    glUniformMatrix2fv(glGetUniformLocation(shader, "transform"), 1, GL_FALSE, (f32*) &m);
+    glUniform4fv(glGetUniformLocation(shader, "color"), 1, (f32*) &color);
+
+    glDrawArrays(GL_TRIANGLES, 0, test_count * 2);
+    
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+}
+
+
+
+
+
+
+
+
+
+
+
 
 int main(int c_arg_count, char** c_args) {
     
     setup(c_arg_count, c_args);
-    
+
+    get_mesh_fonts();
+
+
+
+
     /*/
     String roboto_ttf = load_file("data/fonts/Roboto-Regular.ttf");
     
@@ -67,6 +238,43 @@ int main(int c_arg_count, char** c_args) {
         );
     }
     /*/
+
+
+    /*/
+    CelestialBody bodies[256];
+
+    // blackhole
+    bodies[0] = (CelestialBody) {
+        .base = {
+            .position    = {0, 0, 0},
+            .scale       = {100, 100, 100}, 
+            .orientation = {1, 0, 0, 0},
+        },
+        .velocity = {0},
+        .mass     = 10000000000,   
+        .mesh = &gp->sphere,
+    };
+
+    for (int i = 1; i < length_of(bodies); i++) {
+        float b1 = rand() % 2 ? 1 : -1;
+        float b2 = rand() % 2 ? 1 : -1;
+        f32 rad = (rand() % 256) / 256.0 * TAU;
+        
+        bodies[i] = (CelestialBody) {
+            .base = {
+                .position    = {b1 * (rand() % 512 + 300), b2 * (rand() % 512 + 300), 0 }, //rand() % 1024 - 512},
+                .scale       = {10, 10, 10},
+                .orientation = {1, 0, 0, 0},
+            },
+            .velocity = {cosf(rad), sinf(rad), 0}, //rand() / v * b3},
+            .mass     = (rand() % 1000) * 100 + 10000,
+            .mesh = &gp->sphere,
+        };
+        f32 l = v3_length(bodies[i].base.position);
+        bodies[i].velocity = v3_scale(bodies[i].velocity, l * 0.2);
+    }
+    /*/
+
 
 
     GeometryPrimitives* gp = &geometry_primitives;
@@ -149,41 +357,6 @@ int main(int c_arg_count, char** c_args) {
         },
     };
 
-    /*/
-    CelestialBody bodies[256];
-
-    // blackhole
-    bodies[0] = (CelestialBody) {
-        .base = {
-            .position    = {0, 0, 0},
-            .scale       = {100, 100, 100}, 
-            .orientation = {1, 0, 0, 0},
-        },
-        .velocity = {0},
-        .mass     = 10000000000,   
-        .mesh = &gp->sphere,
-    };
-
-    for (int i = 1; i < length_of(bodies); i++) {
-        float b1 = rand() % 2 ? 1 : -1;
-        float b2 = rand() % 2 ? 1 : -1;
-        f32 rad = (rand() % 256) / 256.0 * TAU;
-        
-        bodies[i] = (CelestialBody) {
-            .base = {
-                .position    = {b1 * (rand() % 512 + 300), b2 * (rand() % 512 + 300), 0 }, //rand() % 1024 - 512},
-                .scale       = {10, 10, 10},
-                .orientation = {1, 0, 0, 0},
-            },
-            .velocity = {cosf(rad), sinf(rad), 0}, //rand() / v * b3},
-            .mass     = (rand() % 1000) * 100 + 10000,
-            .mesh = &gp->sphere,
-        };
-        f32 l = v3_length(bodies[i].base.position);
-        bodies[i].velocity = v3_scale(bodies[i].velocity, l * 0.2);
-    }
-    /*/
-
 
 
     Timer lerp_clock = {0};
@@ -191,7 +364,6 @@ int main(int c_arg_count, char** c_args) {
     Timer fps_clock  = {.interval = 1};
 
     f64 time_now = glfwGetTime();
-
 
 
     // main loop
@@ -219,6 +391,7 @@ int main(int c_arg_count, char** c_args) {
         object.base.position    = lerp_v3((Vector3) {0, 0, -5}, (Vector3) {0, 0, -3}, lerp_value);
         
         light = (Vector3) {cos(lerp_clock.base) * 20, sin(lerp_clock.base) * 20, 0};
+
         /*/
         for (int i = 0; i < length_of(bodies); i++) {
             for (int j = i + 1; j < length_of(bodies); j++) {
@@ -233,7 +406,6 @@ int main(int c_arg_count, char** c_args) {
         }
         /*/
 
-
         // render, todo: this is the most expensive part of the loop
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -244,6 +416,9 @@ int main(int c_arg_count, char** c_args) {
         draw_model(&object3, 1, &camera);
 
 
+        draw_char_test();
+
+        
         // 2D
         draw_string_shadowed(
             (Vector2) {-0.65, 0.7},  

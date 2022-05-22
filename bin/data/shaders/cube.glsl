@@ -41,14 +41,13 @@ uniform vec3      light_pos;
 
 void main() {
 
-    vec3  ambient   = 0.2 * vec3(1, 1, 1);
-    vec3  diffuse   = vec3(0.7, 0.6, 0.3); 
-    
-    vec3  diff      = light_pos - pos;
-    vec3  direction = normalize(diff);
-    float att       = sqrt(1 / length(diff));
-    float scale     = max(dot(normal, direction), 0) * att * 10;
+    vec3 ambient = vec3(1, 1, 1);
+    vec3 diffuse = vec3(0.7, 0.6, 0.3); 
 
-    out_color = texture(texture0, uv) * vec4((ambient + diffuse * scale), 1.0);
+    vec3  dv   = light_pos - pos;
+    float l    = length(dv);
+    float att  = max(dot(normalize(dv), normal), 0) * 500 / (l * l);
+
+    out_color  = texture(texture0, uv) * vec4((ambient * 0.2 + diffuse * att), 1.0);
 }
 
