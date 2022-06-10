@@ -30,11 +30,11 @@ u32      test_vao;
 
 void get_mesh_fonts() {
     
+    u8* data;
     int w;
     int h;
     
     // switch the x y back (because stb flip it) and get rid of channels, just for convenience, maybe slow
-    u8* data;
     {
         Texture* t = &asset_textures.styxel;
 
@@ -72,7 +72,6 @@ void get_mesh_fonts() {
     
     Vector2* vertices = malloc(sizeof(Vector2) * total_pixel_count * 6);
     
-    
     // todo: flip back now, so we can merge this with the flip above
     u64 acc = 0;
     for (int i = y * char_h; i < (y + 1) * char_h; i++) {
@@ -92,13 +91,6 @@ void get_mesh_fonts() {
                 
                 Vector2 p1 = {p3.x, p0.y};
                 Vector2 p2 = {p0.x, p3.y};
-/*/
-                print_v2(p0);
-                print_v2(p1);
-                print_v2(p2);
-                print_v2(p3);
-/*/
-
                 
                 vertices[acc + 0] = p2;
                 vertices[acc + 1] = p3;
@@ -108,29 +100,21 @@ void get_mesh_fonts() {
                 vertices[acc + 5] = p0;
 
                 acc += 6;
-                
-                /*/
-                f32 p0 = ((j + 0) % char_w) / (f32) char_w; 
-                f32 p1 = ((i + 0) % char_h) / (f32) char_h; 
-                f32 p2 = (j % char_w + 1  ) / (f32) char_w; 
-                f32 p3 = (i % char_h + 1  ) / (f32) char_h; 
-
-                printf("%f %f \n%f %f\n\n", p0, p1, p2, p3);
-                /*/
-
-//                printf("\n");
+ 
+/*/
+                print_v2(p0);
+                print_v2(p1);
+                print_v2(p2);
+                print_v2(p3);
+/*/
             }
-            
-            //printf("%c", data[i * w + j] ? 'O' : ' ');
         }
- //       printf("\n");
     }
 
     test_vertices = vertices;
     test_count    = total_pixel_count * 6;
 
     free(data);
-
 
     test_shader = asset_shaders.rect;
 

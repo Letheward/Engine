@@ -22,6 +22,7 @@ typedef struct {
         f64 y;
     } cursor;
 
+    
     // options and states
     u8 vsync;
     u8 cursor_visible;
@@ -185,10 +186,10 @@ f32 engine_speed_scale   = 1.0;
 f32 movement_speed_scale = 1.0;
 
 WindowInfo window_info = {
-    .width           = 1280,
-    .height          = 720,
-    .vsync           = 1,
-    .show_debug_info = 0,
+    .width            = 1280,
+    .height           = 720,
+    .vsync            = 1,
+    .show_debug_info  = 0,
 };
 
 Camera camera = {
@@ -1227,6 +1228,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         switch (button) {
             case GLFW_MOUSE_BUTTON_MIDDLE: {
                 camera.FOV = 70;
+                camera.zx  = 0;
                 update_camera_projection(&camera);
                 break;
             }

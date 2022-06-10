@@ -14,6 +14,8 @@
 - Shader Loading System
     - remove hardcoded stuff
 
+- Configable oversampling at runtime
+
 - UI
     - draw a 2D cross cursor 
 - use multiple shaders
