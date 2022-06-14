@@ -22,9 +22,7 @@ char** get_all_matched_filename_c_strings(char* s, u64* count_out) {
 }
 
 void free_filename_c_strings(char** names, u64 count) {
-    for (u64 i = 0; i < count; i++) {
-        free(names[i]);
-    }
+    for (u64 i = 0; i < count; i++)  free(names[i]);
     free(names);
 }
 
@@ -35,7 +33,7 @@ void free_filename_c_strings(char** names, u64 count) {
 /* ==== Load and Save ==== */
 
 String load_file(char* path) {
-
+    
     FILE* f = fopen(path, "rb");
     if (!f) error("Cannot load %s\n", path); 
 
@@ -49,7 +47,7 @@ String load_file(char* path) {
     data = runtime.alloc(count);
     fread(data, 1, count, f);
     fclose(f);
-
+   
     return (String) {data, count};
 }
 
