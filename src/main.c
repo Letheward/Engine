@@ -13,9 +13,14 @@
 #include "glfw3.h"
 #include "stb_image.h"
 //#include "stb_truetype.h"
-#include "win32_helper.c"
 
-#include "clean.c"
+// todo: linux and mac
+#ifdef OS_WINDOWS
+#include "layer/win32.c"
+#endif
+
+#include "runtime.c"
+#include "file.c"
 #include "linear_algebra.c"
 #include "backend.c"
 
@@ -174,23 +179,9 @@ void draw_char_test() {
 int main(int c_arg_count, char** c_args) {
 
 
-    // temp
-    {
-        u64 count;
-        char** filenames = win32_get_all_matched_filename_c_strings("data/fonts/*.png", &count);
-        for (u64 i = 0; i < count; i++) {
-            printf("%s \n", filenames[i]);
-        }
-        printf("\n");
-        win32_print_all_matched_files("data/fonts/*.png");
-    }
-
-   
     setup(c_arg_count, c_args);
 
     get_mesh_fonts();
-
-
 
 
     /*/

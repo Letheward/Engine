@@ -1,60 +1,15 @@
 /*
 
-# Documentation 
-
-## Using
-
-This library needs your platform to provide standard C runtime/headers, and `windows.h`.
-
-It uses malloc() and free() for now.
-
-
-## Compiling
-
-In c files where you need to use the library, do this:
-~~~ c
-#include "win32_helper.c"
-~~~
-
-And compile with:
-
-- Method 1
 
 Compile this file using compiler command line define, like:
 ~~~ sh
-gcc win32_helper.c -O3 -c -D win32_helper_implementation
+gcc win32.c -O3 -c -D win32_layer_implementation
 ~~~
-(You will probably want to use full optimizations)
 
-Add `win32_helper.o` or whatever (.obj) to your build script
+Add `win32.o` or whatever (.obj) to your build script
 ~~~ sh
-gcc test.c win32_helper.o
+gcc test.c win32.o
 ~~~
-
-- Method 2 (cumbersome)
-
-In just **one** c file, do this:
-~~~ c
-#define win32_helper_implementation
-#include "win32_helper.c"
-~~~ 
-Add this file to build script and compile if it's new.
-
-- Method 3: Unity Build (slow because of the `windows.h`) 
-
-In *one* .c file (commonly the main file) before where you want to use it, do this:
-~~~ c
-#define win32_helper_implementation
-#include "win32_helper.c"
-~~~
-
-
-## FAQ
-
-> Why is this not a `.h` file?
-
-This is for being able to directly compile this file with command line define,
-and not generate some `.h.gch` garbage from gcc.
 
 
 */
@@ -65,12 +20,12 @@ and not generate some `.h.gch` garbage from gcc.
 /* ==== Header ==== */
 
 #define win32_u64 unsigned long long int
+#define win32_bit64(Type, value) ((union {Type a; win32_u64 b;}) {.a = value}).b
 
-#ifndef win32_helper_implementation
+#ifndef win32_layer_implementation
 
 void   win32_print_all_matched_files(char* s);
 char** win32_get_all_matched_filename_c_strings(char* s, win32_u64* count_out);
-void   free_filename_c_strings(char** names, win32_u64 count);
 
 #endif
 
@@ -80,7 +35,7 @@ void   free_filename_c_strings(char** names, win32_u64 count);
 
 /* ==== Implementation ==== */
 
-#ifdef win32_helper_implementation
+#ifdef win32_layer_implementation
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,13 +43,12 @@ void   free_filename_c_strings(char** names, win32_u64 count);
 #include <windows.h>
 
 
-#define win32_helper_bit64(Type, value) ((union {Type a; win32_u64 b;}) {.a = value}).b
 
 void win32_print_find_data(WIN32_FIND_DATA* data) {
 
-    win32_u64 uc = win32_helper_bit64(FILETIME, data->ftCreationTime);
-    win32_u64 ua = win32_helper_bit64(FILETIME, data->ftLastAccessTime);
-    win32_u64 uw = win32_helper_bit64(FILETIME, data->ftLastWriteTime);
+    win32_u64 uc = win32_bit64(FILETIME, data->ftCreationTime);
+    win32_u64 ua = win32_bit64(FILETIME, data->ftLastAccessTime);
+    win32_u64 uw = win32_bit64(FILETIME, data->ftLastWriteTime);
     
     SYSTEMTIME c; 
     SYSTEMTIME a; 
@@ -177,16 +131,10 @@ char** win32_get_all_matched_filename_c_strings(char* s, win32_u64* count_out) {
     return out;
 }
 
-void free_filename_c_strings(char** names, win32_u64 count) {
-    for (win32_u64 i = 0; i < count; i++) {
-        free(names[i]);
-    }
-    free(names);
-}
 
 #endif
 
+#undef win32_bit64
 #undef win32_u64
-#undef win32_helper_bit64
 
 
