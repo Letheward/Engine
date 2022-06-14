@@ -13,10 +13,12 @@
 #include "glfw3.h"
 #include "stb_image.h"
 //#include "stb_truetype.h"
+#include "win32_helper.c"
 
 #include "clean.c"
 #include "linear_algebra.c"
 #include "backend.c"
+
 
 
 // temp
@@ -141,8 +143,7 @@ void draw_char_test() {
     Vector4 color = {1, 1, 1, 1};
     
     Vector2 scale = {0.1, 0.1};
-    Matrix2 m = m2_scale((Vector2) {1 / window_info.aspect, 1});
-    m = m2_mul(m2_scale(scale), m);
+    Matrix2 m = m2_mul(m2_scale(scale), m2_scale((Vector2) {1 / window_info.aspect, 1}));
 
     u32 shader = test_shader;
     glUseProgram(shader); 
@@ -171,7 +172,20 @@ void draw_char_test() {
 
 
 int main(int c_arg_count, char** c_args) {
-    
+
+
+    // temp
+    {
+        u64 count;
+        char** filenames = win32_get_all_matched_filename_c_strings("data/fonts/*.png", &count);
+        for (u64 i = 0; i < count; i++) {
+            printf("%s \n", filenames[i]);
+        }
+        printf("\n");
+        win32_print_all_matched_files("data/fonts/*.png");
+    }
+
+   
     setup(c_arg_count, c_args);
 
     get_mesh_fonts();
@@ -258,7 +272,7 @@ int main(int c_arg_count, char** c_args) {
         bodies[i].velocity = v3_scale(bodies[i].velocity, l * 0.2);
     }
     /*/
-
+    
 
 
     GeometryPrimitives* gp = &geometry_primitives;
@@ -393,6 +407,7 @@ int main(int c_arg_count, char** c_args) {
         // render, todo: this is the most expensive part of the loop
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        
         // 3D        
         draw_model(room, 6, &camera);
         draw_model(&object, 1, &camera);

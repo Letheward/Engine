@@ -3,7 +3,7 @@
 ## Bugs
 
 - 3D Transparent texture leak problem
-
+- if we want to do unity build using `win32_helper.c`, in current header order, something in `windows.h` makes gcc unhappy
 
 ## TODO
 
@@ -13,6 +13,8 @@
 
 - Shader Loading System
     - remove hardcoded stuff
+
+- improve text drawing performance
 
 - Configable oversampling at runtime
 

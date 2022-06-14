@@ -1,5 +1,6 @@
 *.exe
 *.a
+*.o
 bin/logs/*
 bin/data/fonts/*
 bin/data/save/*

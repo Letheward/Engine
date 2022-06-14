@@ -98,7 +98,6 @@ typedef struct {
     Mesh*    mesh;
 } CelestialBody;
 
-
 typedef struct {
     
     Vector3 position;
@@ -524,8 +523,8 @@ void draw_string(Vector2 position, Vector2 scale, Vector4 color, String s) {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
  
     glBindTexture(GL_TEXTURE_2D, asset_textures.styxel.id);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glActiveTexture(GL_TEXTURE0);

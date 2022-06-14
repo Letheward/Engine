@@ -1,6 +1,6 @@
 # Windows + MinGW
 name="game"
-src="src/main.c"
+src="src/main.c lib/win32_helper.o"
 dep="-I lib/hdr -L lib/"
 lin="-lglfw3 -lglad -lstb_image -lgdi32"
 opt="-O0"
