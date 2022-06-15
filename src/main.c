@@ -6,6 +6,9 @@
 #include <math.h>
 #include <time.h>
 
+
+
+/* ---- Third Party ---- */
 #define GLFW_INCLUDE_NONE
 //#define STB_TRUETYPE_IMPLEMENTATION 
 
@@ -14,9 +17,17 @@
 #include "stb_image.h"
 //#include "stb_truetype.h"
 
+
+
+/* ---- Modules ---- */
+
 // todo: linux and mac
 #ifdef OS_WINDOWS
 #include "layer/win32.c"
+
+// On Windows, these stupid global variables force laptops to use dedicated GPU
+__declspec(dllexport) int NvOptimusEnablement = 0x00000001;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 #endif
 
 #include "runtime.c"
@@ -26,14 +37,14 @@
 
 
 
+
+
 // temp
 Vector2* test_vertices;
 u32      test_count;
 u32      test_shader;
 u32      test_vbo;
 u32      test_vao;
-
-
 
 void get_mesh_fonts() {
     

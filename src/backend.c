@@ -172,11 +172,6 @@ typedef struct {
 
 /* ---- Data ---- */
 
-// stupid global variables to force laptop to use dedicated GPU
-// on linux these don't work and will break compilation
-__declspec(dllexport) int NvOptimusEnablement = 0x00000001;
-__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
-
 GeometryPrimitives geometry_primitives;
 Asset_Shaders      asset_shaders;
 Asset_Textures     asset_textures;
