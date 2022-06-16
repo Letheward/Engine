@@ -47,19 +47,26 @@ u32      test_vbo;
 u32      test_vao;
 
 
-// temp
-void get_char_xy(u8 c, int* x, int* y) {
-    int d = c - ' ';
-    *x = d % 16;
-    *y = d / 16;
-}
-
 
 void get_mesh_fonts() {
     
+    const int char_w = 6;
+    const int char_h = 6;
+    
     u8* data;
+    int x;
+    int y;
+    
     int w;
     int h;
+    
+    u8 char_to_display = 'H';
+    
+    {
+        u8 d = char_to_display - ' ';
+        x = d % 16;
+        y = d / 16;
+    }
     
     // switch the x y back (because stb flip it) and get rid of channels, just for convenience, maybe slow
     {
@@ -79,12 +86,6 @@ void get_mesh_fonts() {
     }
 
     printf("w %d h %d\n", w, h);
-    
-    int char_w = 6;
-    int char_h = 6;
-    int x;
-    int y;
-    get_char_xy('A', &x, &y);
     
     u32 total_pixel_count = 0;
 
@@ -151,7 +152,7 @@ void get_mesh_fonts() {
 
     glUseProgram(test_shader); 
     glBindBuffer(GL_ARRAY_BUFFER, test_vbo);
-    glBufferData(GL_ARRAY_BUFFER, test_count * sizeof(Vector2), (f32*) test_vertices, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Vector2) * test_count, (f32*) test_vertices, GL_DYNAMIC_DRAW);
 
     glBindVertexArray(test_vao);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(f32), (void*) 0);
@@ -166,10 +167,9 @@ void draw_char_test() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    Vector4 color = {1, 1, 1, 1};
-    Vector4 color2 = {0, 0, 0, 0.7};
-    
-    Vector2 scale = {0.05, 0.05};
+    Vector2 scale    = {0.05, 0.05};
+    Vector2 position = {0, 0.1};
+    Vector4 color    = {1, 1, 1, 1};
 
     Matrix2 m = m2_mul(m2_scale(scale), m2_scale((Vector2) {1 / window_info.aspect, 1}));
 
@@ -179,21 +179,11 @@ void draw_char_test() {
     glBindBuffer(GL_ARRAY_BUFFER, test_vbo);
     glBindVertexArray(test_vao);
 
+    glUniform4fv(glGetUniformLocation(shader, "color"), 1, (f32*) &color);
+    glUniform2fv(glGetUniformLocation(shader, "position"), 1, (f32*) &position);
     glUniformMatrix2fv(glGetUniformLocation(shader, "transform"), 1, GL_FALSE, (f32*) &m);
-   
-    for (int i = 0; i < 6; i++) {
-        Vector2 position = {i * 0.05 + 0.004, 0.1 - 0.006};
-        glUniform4fv(glGetUniformLocation(shader, "color"), 1, (f32*) &color2);
-        glUniform2fv(glGetUniformLocation(shader, "position"), 1, (f32*) &position);
-        glDrawArrays(GL_TRIANGLES, 0, test_count * 2);
-    }
-     
-    for (int i = 0; i < 6; i++) {
-        Vector2 position = {i * 0.05, 0.1};
-        glUniform4fv(glGetUniformLocation(shader, "color"), 1, (f32*) &color);
-        glUniform2fv(glGetUniformLocation(shader, "position"), 1, (f32*) &position);
-        glDrawArrays(GL_TRIANGLES, 0, test_count * 2);
-    }
+
+    glDrawArrays(GL_TRIANGLES, 0, test_count * 2);
     
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);

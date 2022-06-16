@@ -393,29 +393,31 @@ void pause_or_continue() {
 
 /* ==== Renderer ==== */
 
-void draw_axis_arrow(Vector3 scale, Camera* cam) {
+// todo: what's the better way to do position?
+void draw_rect(Vector2 position, Vector2 scale, Vector4 color) {
+    
+    Mesh* mesh = &geometry_primitives.rectangle;
 
-    Mesh* mesh = &geometry_primitives.axis_arrow;
-
-    Vector3 position = v3_add(cam->position, v3_rotate(V3_Y, cam->orientation));
+    Matrix2 m = m2_scale((Vector2) {1 / window_info.aspect, 1});
+    m = m2_mul(m2_scale(scale), m);
+    
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA);
 
     glUseProgram(mesh->id.shader); 
     glBindVertexArray(mesh->id.vertex_array);
     glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
+ 
+    glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m);
     
-    Matrix4 m = m4_mul(m4_translate(position), m4_scale(scale));
-    glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "projection"), 1, GL_FALSE, (f32*) &cam->projection);
-    glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "view"), 1, GL_FALSE, (f32*) &cam->view);
-    glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "model"), 1, GL_FALSE, (f32*) &m);
-    
-    glDisable(GL_DEPTH_TEST);
-    glLineWidth(2);
-   
-    glDrawElements(GL_LINES, mesh->index_count, GL_UNSIGNED_INT, NULL);
-    
+    glUniform4fv(glGetUniformLocation(mesh->id.shader, "color"), 1, (f32*) &color);
+    glUniform2fv(glGetUniformLocation(mesh->id.shader, "position"), 1, (f32*) &position);
+    glDrawElements(GL_TRIANGLES, mesh->index_count, GL_UNSIGNED_INT, NULL);
+
+    glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
-    glLineWidth(1);
 }
 
 // todo: how should we do offset?
@@ -474,35 +476,7 @@ void draw_circle(Vector2 position, Vector2 scale, Vector4 color) {
 }
 
 
-
-// todo: what's the better way to do offset?
-void draw_rect(Vector2 position, Vector2 scale, Vector4 color) {
-    
-    Mesh* mesh = &geometry_primitives.rectangle;
-
-    Matrix2 m = m2_scale((Vector2) {1 / window_info.aspect, 1});
-    m = m2_mul(m2_scale(scale), m);
-    
-    glDisable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA);
-
-    glUseProgram(mesh->id.shader); 
-    glBindVertexArray(mesh->id.vertex_array);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
- 
-    glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m);
-    
-    glUniform4fv(glGetUniformLocation(mesh->id.shader, "color"), 1, (f32*) &color);
-    glUniform2fv(glGetUniformLocation(mesh->id.shader, "position"), 1, (f32*) &position);
-    glDrawElements(GL_TRIANGLES, mesh->index_count, GL_UNSIGNED_INT, NULL);
-
-    glDisable(GL_BLEND);
-    glEnable(GL_DEPTH_TEST);
-}
-
-// todo: what's the better way to do offset?
+// todo: what's the better way to do position?
 // todo: texture leak bug?
 void draw_string(Vector2 position, Vector2 scale, Vector4 color, String s) {
     
@@ -558,7 +532,30 @@ void draw_string_shadowed(Vector2 position, Vector2 offset, Vector2 scale, Vecto
 }
 
 
+void draw_axis_arrow(Vector3 scale, Camera* cam) {
 
+    Mesh* mesh = &geometry_primitives.axis_arrow;
+
+    Vector3 position = v3_add(cam->position, v3_rotate(V3_Y, cam->orientation));
+
+    glUseProgram(mesh->id.shader); 
+    glBindVertexArray(mesh->id.vertex_array);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
+    
+    Matrix4 m = m4_mul(m4_translate(position), m4_scale(scale));
+    glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "projection"), 1, GL_FALSE, (f32*) &cam->projection);
+    glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "view"), 1, GL_FALSE, (f32*) &cam->view);
+    glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "model"), 1, GL_FALSE, (f32*) &m);
+    
+    glDisable(GL_DEPTH_TEST);
+    glLineWidth(2);
+   
+    glDrawElements(GL_LINES, mesh->index_count, GL_UNSIGNED_INT, NULL);
+    
+    glEnable(GL_DEPTH_TEST);
+    glLineWidth(1);
+}
 
 // todo: how to handle other shaders? how to get light?
 void draw_model(Model3D* model, int count, Camera* cam) {
@@ -581,34 +578,6 @@ void draw_model(Model3D* model, int count, Camera* cam) {
     glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "projection"), 1, GL_FALSE, (f32*) &cam->projection);
     glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "view"), 1, GL_FALSE, (f32*) &cam->view);
     glUniform3fv(glGetUniformLocation(mesh->id.shader, "light_pos"), 1, (f32*) &light);
-    
-    for (int i = 0; i < count; i++) {
-        Matrix4 m = entity_to_m4(model[i].base);
-        glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "model"), 1, GL_FALSE, (f32*) &m);
-        glDrawElements(cam->draw_mode, mesh->index_count, GL_UNSIGNED_INT, NULL);
-    }
-}
-
-
-void draw_body(CelestialBody* model, int count, Camera* cam) {
-    
-    Mesh* mesh = model->mesh; 
-
-    glUseProgram(mesh->id.shader); 
-    glBindVertexArray(mesh->id.vertex_array);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
-    
-    glBindTexture(GL_TEXTURE_2D, mesh->id.texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glActiveTexture(GL_TEXTURE0);
-    glUniform1i(glGetUniformLocation(mesh->id.shader, "texture0"), 0);
-    
-    glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "projection"), 1, GL_FALSE, (f32*) &cam->projection);
-    glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "view"), 1, GL_FALSE, (f32*) &cam->view);
     
     for (int i = 0; i < count; i++) {
         Matrix4 m = entity_to_m4(model[i].base);
