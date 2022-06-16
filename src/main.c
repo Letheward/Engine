@@ -46,6 +46,15 @@ u32      test_shader;
 u32      test_vbo;
 u32      test_vao;
 
+
+// temp
+void get_char_xy(u8 c, int* x, int* y) {
+    int d = c - ' ';
+    *x = d % 16;
+    *y = d / 16;
+}
+
+
 void get_mesh_fonts() {
     
     u8* data;
@@ -73,8 +82,9 @@ void get_mesh_fonts() {
     
     int char_w = 6;
     int char_h = 6;
-    int x = 1;
-    int y = 2;
+    int x;
+    int y;
+    get_char_xy('A', &x, &y);
     
     u32 total_pixel_count = 0;
 
@@ -154,11 +164,13 @@ void draw_char_test() {
 
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     Vector4 color = {1, 1, 1, 1};
+    Vector4 color2 = {0, 0, 0, 0.7};
     
-    Vector2 scale = {0.1, 0.1};
+    Vector2 scale = {0.05, 0.05};
+
     Matrix2 m = m2_mul(m2_scale(scale), m2_scale((Vector2) {1 / window_info.aspect, 1}));
 
     u32 shader = test_shader;
@@ -168,9 +180,20 @@ void draw_char_test() {
     glBindVertexArray(test_vao);
 
     glUniformMatrix2fv(glGetUniformLocation(shader, "transform"), 1, GL_FALSE, (f32*) &m);
-    glUniform4fv(glGetUniformLocation(shader, "color"), 1, (f32*) &color);
-
-    glDrawArrays(GL_TRIANGLES, 0, test_count * 2);
+   
+    for (int i = 0; i < 6; i++) {
+        Vector2 position = {i * 0.05 + 0.004, 0.1 - 0.006};
+        glUniform4fv(glGetUniformLocation(shader, "color"), 1, (f32*) &color2);
+        glUniform2fv(glGetUniformLocation(shader, "position"), 1, (f32*) &position);
+        glDrawArrays(GL_TRIANGLES, 0, test_count * 2);
+    }
+     
+    for (int i = 0; i < 6; i++) {
+        Vector2 position = {i * 0.05, 0.1};
+        glUniform4fv(glGetUniformLocation(shader, "color"), 1, (f32*) &color);
+        glUniform2fv(glGetUniformLocation(shader, "position"), 1, (f32*) &position);
+        glDrawArrays(GL_TRIANGLES, 0, test_count * 2);
+    }
     
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
@@ -238,43 +261,6 @@ int main(int c_arg_count, char** c_args) {
         );
     }
     /*/
-
-
-    /*/
-    CelestialBody bodies[256];
-
-    // blackhole
-    bodies[0] = (CelestialBody) {
-        .base = {
-            .position    = {0, 0, 0},
-            .scale       = {100, 100, 100}, 
-            .orientation = {1, 0, 0, 0},
-        },
-        .velocity = {0},
-        .mass     = 10000000000,   
-        .mesh = &gp->sphere,
-    };
-
-    for (int i = 1; i < length_of(bodies); i++) {
-        float b1 = rand() % 2 ? 1 : -1;
-        float b2 = rand() % 2 ? 1 : -1;
-        f32 rad = (rand() % 256) / 256.0 * TAU;
-        
-        bodies[i] = (CelestialBody) {
-            .base = {
-                .position    = {b1 * (rand() % 512 + 300), b2 * (rand() % 512 + 300), 0 }, //rand() % 1024 - 512},
-                .scale       = {10, 10, 10},
-                .orientation = {1, 0, 0, 0},
-            },
-            .velocity = {cosf(rad), sinf(rad), 0}, //rand() / v * b3},
-            .mass     = (rand() % 1000) * 100 + 10000,
-            .mesh = &gp->sphere,
-        };
-        f32 l = v3_length(bodies[i].base.position);
-        bodies[i].velocity = v3_scale(bodies[i].velocity, l * 0.2);
-    }
-    /*/
-    
 
 
     GeometryPrimitives* gp = &geometry_primitives;
@@ -380,64 +366,51 @@ int main(int c_arg_count, char** c_args) {
         update_FPS_timer(&fps_clock, dt);
 
 
-        // simulate
-        process_inputs(dt);
-        f64 scaled_dt    = dt * engine_speed_scale;
-        lerp_clock.base += scaled_dt;
-        text_pulse.base += dt * 8;
-        
-        f32 lerp_value          = sin_normalize(lerp_clock.base);
-        object.base.orientation = nlerp_r3d(R3D_DEFAULT, r3d_from_plane_angle(B3_XY, TAU * 0.25), lerp_value);
-        object.base.position    = lerp_v3((Vector3) {0, 0, -5}, (Vector3) {0, 0, -3}, lerp_value);
-        
-        light = (Vector3) {cos(lerp_clock.base) * 20, sin(lerp_clock.base) * 20, 0};
-
-        /*/
-        for (int i = 0; i < length_of(bodies); i++) {
-            for (int j = i + 1; j < length_of(bodies); j++) {
-                Vector3 v = get_gravity(bodies[i], bodies[j]);
-                update_velocity(&bodies[i], v, scaled_dt);
-                update_velocity(&bodies[j], v3_reverse(v), scaled_dt);
-            }
+        /* ==== Simulate ==== */ 
+        {
+            process_inputs(dt);
+            f64 scaled_dt    = dt * engine_speed_scale;
+            lerp_clock.base += scaled_dt;
+            text_pulse.base += dt * 6;
+            
+            f32 lerp_value          = sin_normalize(lerp_clock.base);
+            object.base.orientation = nlerp_r3d(R3D_DEFAULT, r3d_from_plane_angle(B3_XY, TAU * 0.25), lerp_value);
+            object.base.position    = lerp_v3((Vector3) {0, 0, -5}, (Vector3) {0, 0, -3}, lerp_value);
+            
+            light = (Vector3) {cos(lerp_clock.base) * 20, sin(lerp_clock.base) * 20, 0};
         }
 
-        for (int i = 0; i < length_of(bodies); i++) {
-            update_position(&bodies[i], scaled_dt);
-        }
-        /*/
 
-        // render, todo: this is the most expensive part of the loop
+
+        /* ==== Render ==== */ 
+
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         
-        // 3D        
+        /* ---- 3D ---- */
+        
         draw_model(room, 6, &camera);
         draw_model(&object, 1, &camera);
         draw_model(&object2, 1, &camera);
         draw_model(&object3, 1, &camera);
 
-
         draw_char_test();
 
-        
-        // 2D
-        draw_string_shadowed(
-            (Vector2) {-0.65, 0.7},  
-            (Vector2) {0.006, -0.009}, 
-            (Vector2) {0.1, 0.1}, 
-            lerp_v4((Vector4) {0.5, 0.7, 0.95, 1}, (Vector4) {0.2, 0.8, 0.45, 1}, sin_normalize(text_pulse.base)),
-            (Vector4) {0, 0, 0, 0.7}, 
-            string("WASD to move, QE to roll")
-        );
 
-        draw_string_shadowed(
-            (Vector2) {-0.65, 0.5},  
-            (Vector2) {0.006, -0.009}, 
-            (Vector2) {0.1, 0.1}, 
-            lerp_v4((Vector4) {0.5, 0.7, 0.95, 1}, (Vector4) {0.2, 0.8, 0.45, 1}, sin_normalize(text_pulse.base)),
-            (Vector4) {0, 0, 0, 0.7}, 
-            string("ESC to exit")
-        );
+
+        /* ---- 2D ---- */
+
+        {
+            Vector2 pos        = lerp_v2((Vector2) {-0.65, 0.7}, (Vector2) {-0.65, 0.72}, sin_normalize(text_pulse.base));
+            Vector2 pos2       = v2_add(pos, (Vector2) {0, -0.2});
+            Vector2 scale      = {0.1, 0.1}; 
+            Vector2 offset     = {0.005, -0.007};
+            Vector4 color      = lerp_v4((Vector4) {0.5, 0.7, 0.95, 1}, (Vector4) {0.2, 0.8, 0.45, 1}, sin_normalize(text_pulse.base));
+            Vector4 color_back = {0, 0, 0, 0.7}; 
+
+            draw_string_shadowed(pos , offset, scale, color, color_back, string("WASD to move, QE to roll"));
+            draw_string_shadowed(pos2, offset, scale, color, color_back, string("ESC to exit"));
+        }
         
         if (window_info.show_debug_info) {
 
@@ -465,23 +438,23 @@ int main(int c_arg_count, char** c_args) {
                 if (window_info.is_first_frame) fps.count = 0;
             }
             
-            Vector2 text_scale  = {0.03, 0.03};
-            Vector4 text_fg     = V4_UNIT;
-            Vector4 text_bg     = {0, 0, 0, 0.7};
-            Vector2 text_offset = {text_scale.x * 0.1, text_scale.y * -0.1};
+            Vector2 scale      = {0.03, 0.03};
+            Vector2 offset     = {scale.x * 0.1, scale.y * -0.1};
+            Vector4 color      = V4_UNIT;
+            Vector4 color_back = {0, 0, 0, 0.7};
             
-            draw_string_shadowed((Vector2) {-0.95, 0.9},  text_offset, text_scale, text_fg, text_bg, fps);
-            draw_string_shadowed((Vector2) {-0.95, 0.85}, text_offset, text_scale, text_fg, text_bg, temp_print("Engine   Speed: %f", engine_speed_scale));
-            draw_string_shadowed((Vector2) {-0.95, 0.8},  text_offset, text_scale, text_fg, text_bg, temp_print("Movement Speed: %f", movement_speed_scale));
-            draw_string_shadowed((Vector2) {-0.95, 0.75}, text_offset, text_scale, text_fg, text_bg, draw_mode);
+            draw_string_shadowed((Vector2) {-0.95, 0.9},  offset, scale, color, color_back, fps);
+            draw_string_shadowed((Vector2) {-0.95, 0.85}, offset, scale, color, color_back, temp_print("Engine   Speed: %f", engine_speed_scale));
+            draw_string_shadowed((Vector2) {-0.95, 0.8},  offset, scale, color, color_back, temp_print("Movement Speed: %f", movement_speed_scale));
+            draw_string_shadowed((Vector2) {-0.95, 0.75}, offset, scale, color, color_back, draw_mode);
 
             draw_axis_arrow((Vector3) {0.05, 0.05, 0.05}, &camera);
 
         } else {
 
             // cursor
-            draw_circle((Vector2) {0.014, 0.014}, (Vector4) {0, 0, 0, 0.2});
-            draw_circle((Vector2) {0.012, 0.012}, (Vector4) {1, 1, 1, 0.8});
+            draw_circle((Vector2) {0, 0}, (Vector2) {0.014, 0.014}, (Vector4) {0, 0, 0, 0.2});
+            draw_circle((Vector2) {0, 0}, (Vector2) {0.012, 0.012}, (Vector4) {1, 1, 1, 0.8});
         }
 
 

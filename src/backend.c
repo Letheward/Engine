@@ -419,7 +419,7 @@ void draw_axis_arrow(Vector3 scale, Camera* cam) {
 }
 
 // todo: how should we do offset?
-void draw_ring(Vector2 scale, f32 line_width, Vector4 color) {
+void draw_ring(Vector3 position, Vector2 scale, f32 line_width, Vector4 color) {
     
     Mesh* mesh = &geometry_primitives.ring;
 
@@ -435,9 +435,9 @@ void draw_ring(Vector2 scale, f32 line_width, Vector4 color) {
     glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
  
-    glUniform4fv(glGetUniformLocation(mesh->id.shader, "color"), 1, (f32*) &color);
-
+    glUniform2fv(glGetUniformLocation(mesh->id.shader, "position"), 1, (f32*) &position);
     glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m);
+    glUniform4fv(glGetUniformLocation(mesh->id.shader, "color"), 1, (f32*) &color);
     
     glLineWidth(line_width);
     glDrawElements(GL_LINES, mesh->index_count, GL_UNSIGNED_INT, NULL);
@@ -447,7 +447,7 @@ void draw_ring(Vector2 scale, f32 line_width, Vector4 color) {
     glEnable(GL_DEPTH_TEST);
 }
 
-void draw_circle(Vector2 scale, Vector4 color) {
+void draw_circle(Vector2 position, Vector2 scale, Vector4 color) {
     
     Mesh* mesh = &geometry_primitives.circle;
 
@@ -463,6 +463,7 @@ void draw_circle(Vector2 scale, Vector4 color) {
     glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
  
+    glUniform2fv(glGetUniformLocation(mesh->id.shader, "position"), 1, (f32*) &position);
     glUniform4fv(glGetUniformLocation(mesh->id.shader, "color"), 1, (f32*) &color);
     glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m);
     
@@ -475,10 +476,13 @@ void draw_circle(Vector2 scale, Vector4 color) {
 
 
 // todo: what's the better way to do offset?
-void draw_rect(Matrix2* m, int count, Vector4 color) {
+void draw_rect(Vector2 position, Vector2 scale, Vector4 color) {
     
     Mesh* mesh = &geometry_primitives.rectangle;
 
+    Matrix2 m = m2_scale((Vector2) {1 / window_info.aspect, 1});
+    m = m2_mul(m2_scale(scale), m);
+    
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA);
@@ -488,12 +492,11 @@ void draw_rect(Matrix2* m, int count, Vector4 color) {
     glBindBuffer(GL_ARRAY_BUFFER, mesh->id.vertices);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->id.indices);
  
+    glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m);
+    
     glUniform4fv(glGetUniformLocation(mesh->id.shader, "color"), 1, (f32*) &color);
-
-    for (int i = 0; i < count; i++) {
-        glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m[i]);
-        glDrawElements(GL_TRIANGLES, mesh->index_count, GL_UNSIGNED_INT, NULL);
-    }
+    glUniform2fv(glGetUniformLocation(mesh->id.shader, "position"), 1, (f32*) &position);
+    glDrawElements(GL_TRIANGLES, mesh->index_count, GL_UNSIGNED_INT, NULL);
 
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
