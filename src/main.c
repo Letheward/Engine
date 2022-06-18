@@ -26,7 +26,7 @@
 #include "layer/win32.c"
 
 // On Windows, these stupid global variables force laptops to use dedicated GPU
-__declspec(dllexport) int NvOptimusEnablement = 0x00000001;
+__declspec(dllexport) int NvOptimusEnablement                  = 0x00000001;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 #endif
 
@@ -38,175 +38,9 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 
 
 
-
-// temp
-Vector2* test_vertices;
-u32      test_count;
-u32      test_shader;
-u32      test_vbo;
-u32      test_vao;
-
-
-
-void get_mesh_fonts() {
-    
-    const int char_w = 6;
-    const int char_h = 6;
-    
-    u8* data;
-    int x;
-    int y;
-    
-    int w;
-    int h;
-    
-    u8 char_to_display = 'H';
-    
-    {
-        u8 d = char_to_display - ' ';
-        x = d % 16;
-        y = d / 16;
-    }
-    
-    // switch the x y back (because stb flip it) and get rid of channels, just for convenience, maybe slow
-    {
-        Texture* t = &asset_textures.styxel;
-
-        w = t->w;
-        h = t->h;
-        data = malloc(w * h); 
-
-        u64 acc = 0;
-        for (int i = h - 1; i >= 0; i--) {
-            for (int j = 0; j < w * 4; j += 4) {
-                data[acc] = t->data[i * w * 4 + j];
-                acc++;
-            }
-        }
-    }
-
-    printf("w %d h %d\n", w, h);
-    
-    u32 total_pixel_count = 0;
-
-    for (int i = y * char_h; i < (y + 1) * char_h; i++) {
-        for (int j = x * char_w; j < (x + 1) * char_w; j++) {
-            printf("%c", data[i * w + j] ? 'O' : ' ');
-            if (data[i * w + j]) total_pixel_count++;
-        }
-        printf("\n");
-    }
-    
-    printf("total pixel count %d\n", total_pixel_count);
-    
-    Vector2* vertices = malloc(sizeof(Vector2) * total_pixel_count * 6);
-    
-    // todo: flip back now, so we can merge this with the flip above
-    u64 acc = 0;
-    for (int i = y * char_h; i < (y + 1) * char_h; i++) {
-        for (int j = x * char_w; j < (x + 1) * char_w; j++) {
-          
-            if (data[i * w + j]) {
-
-                Vector2 p0 = {
-                    ((j + 0) % char_w) / (f32) char_w, 
-                    1 - ((i + 0) % char_h) / (f32) char_h, 
-                };
-
-                Vector2 p3 = {
-                    (j % char_w + 1) / (f32) char_w, 
-                    1 - (i % char_h + 1) / (f32) char_h, 
-                };
-                
-                Vector2 p1 = {p3.x, p0.y};
-                Vector2 p2 = {p0.x, p3.y};
-                
-                vertices[acc + 0] = p2;
-                vertices[acc + 1] = p3;
-                vertices[acc + 2] = p1;
-                vertices[acc + 3] = p2;
-                vertices[acc + 4] = p1;
-                vertices[acc + 5] = p0;
-
-                acc += 6;
- 
-/*/
-                print_v2(p0);
-                print_v2(p1);
-                print_v2(p2);
-                print_v2(p3);
-/*/
-            }
-        }
-    }
-
-    test_vertices = vertices;
-    test_count    = total_pixel_count * 6;
-
-    free(data);
-
-    test_shader = asset_shaders.rect;
-
-    glGenBuffers(     1, &test_vbo);
-    glGenVertexArrays(1, &test_vao);
-
-    glUseProgram(test_shader); 
-    glBindBuffer(GL_ARRAY_BUFFER, test_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(Vector2) * test_count, (f32*) test_vertices, GL_DYNAMIC_DRAW);
-
-    glBindVertexArray(test_vao);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(f32), (void*) 0);
-    glEnableVertexAttribArray(0);
-}
-
-
-
-void draw_char_test() {
-
-    glDisable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    Vector2 scale    = {0.05, 0.05};
-    Vector2 position = {0, 0.1};
-    Vector4 color    = {1, 1, 1, 1};
-
-    Matrix2 m = m2_mul(m2_scale(scale), m2_scale((Vector2) {1 / window_info.aspect, 1}));
-
-    u32 shader = test_shader;
-    glUseProgram(shader); 
-
-    glBindBuffer(GL_ARRAY_BUFFER, test_vbo);
-    glBindVertexArray(test_vao);
-
-    glUniform4fv(glGetUniformLocation(shader, "color"), 1, (f32*) &color);
-    glUniform2fv(glGetUniformLocation(shader, "position"), 1, (f32*) &position);
-    glUniformMatrix2fv(glGetUniformLocation(shader, "transform"), 1, GL_FALSE, (f32*) &m);
-
-    glDrawArrays(GL_TRIANGLES, 0, test_count * 2);
-    
-    glDisable(GL_BLEND);
-    glEnable(GL_DEPTH_TEST);
-}
-
-
-
-
-
-
-
-
-
-
-
-
 int main(int c_arg_count, char** c_args) {
 
-
     setup(c_arg_count, c_args);
-
-    get_mesh_fonts();
-
 
     /*/
     String roboto_ttf = load_file("data/fonts/Roboto-Regular.ttf");
@@ -384,8 +218,6 @@ int main(int c_arg_count, char** c_args) {
         draw_model(&object2, 1, &camera);
         draw_model(&object3, 1, &camera);
 
-        draw_char_test();
-
 
 
         /* ---- 2D ---- */
@@ -398,8 +230,8 @@ int main(int c_arg_count, char** c_args) {
             Vector4 color      = lerp_v4((Vector4) {0.5, 0.7, 0.95, 1}, (Vector4) {0.2, 0.8, 0.45, 1}, sin_normalize(text_pulse.base));
             Vector4 color_back = {0, 0, 0, 0.7}; 
 
-            draw_string_shadowed(pos , offset, scale, color, color_back, string("WASD to move, QE to roll"));
-            draw_string_shadowed(pos2, offset, scale, color, color_back, string("ESC to exit"));
+            draw_mesh_string_shadowed(pos , offset, scale, color, color_back, string("WASD to move, QE to roll"));
+            draw_mesh_string_shadowed(pos2, offset, scale, color, color_back, string("ESC to exit"));
         }
         
         if (window_info.show_debug_info) {
@@ -433,10 +265,10 @@ int main(int c_arg_count, char** c_args) {
             Vector4 color      = V4_UNIT;
             Vector4 color_back = {0, 0, 0, 0.7};
             
-            draw_string_shadowed((Vector2) {-0.95, 0.9},  offset, scale, color, color_back, fps);
-            draw_string_shadowed((Vector2) {-0.95, 0.85}, offset, scale, color, color_back, temp_print("Engine   Speed: %f", engine_speed_scale));
-            draw_string_shadowed((Vector2) {-0.95, 0.8},  offset, scale, color, color_back, temp_print("Movement Speed: %f", movement_speed_scale));
-            draw_string_shadowed((Vector2) {-0.95, 0.75}, offset, scale, color, color_back, draw_mode);
+            draw_mesh_string_shadowed((Vector2) {-0.95, 0.9},  offset, scale, color, color_back, fps);
+            draw_mesh_string_shadowed((Vector2) {-0.95, 0.85}, offset, scale, color, color_back, temp_print("Engine   Speed: %f", engine_speed_scale));
+            draw_mesh_string_shadowed((Vector2) {-0.95, 0.8},  offset, scale, color, color_back, temp_print("Movement Speed: %f", movement_speed_scale));
+            draw_mesh_string_shadowed((Vector2) {-0.95, 0.75}, offset, scale, color, color_back, draw_mode);
 
             draw_axis_arrow((Vector3) {0.05, 0.05, 0.05}, &camera);
 

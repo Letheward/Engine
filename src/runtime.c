@@ -208,7 +208,7 @@ String temp_print(char* s, ...) {
     return out;
 }
 
-String find(String a, String b) {
+String string_find(String a, String b) {
     
     if (!a.data || !b.data || !a.count || !b.count) return (String) {0};
     

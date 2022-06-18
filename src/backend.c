@@ -167,6 +167,15 @@ typedef struct {
     Mesh tetrahedron;
 } GeometryPrimitives;
 
+// todo: slow!!!
+typedef struct {
+    Vector2* vertices;
+    u32      count;
+    u32      vao;
+    u32      vbo;
+} MeshCharacter;
+
+
 
 
 
@@ -175,6 +184,8 @@ typedef struct {
 GeometryPrimitives geometry_primitives;
 Asset_Shaders      asset_shaders;
 Asset_Textures     asset_textures;
+
+MeshCharacter mesh_alphabet[256];    
 
 f32 engine_speed_scale   = 1.0;
 f32 movement_speed_scale = 1.0;
@@ -271,7 +282,7 @@ void GL_print_debug_message(
     const void*   user_param
 ) {
     switch (severity) {
-        case GL_DEBUG_SEVERITY_NOTIFICATION: logprint("[OpenGL] [Note] %s\n"    , message); break;
+        //case GL_DEBUG_SEVERITY_NOTIFICATION: logprint("[OpenGL] [Note] %s\n"    , message); break; // disabled because mesh font spam this too much, which slow down startup time
         case GL_DEBUG_SEVERITY_LOW:          logprint("[OpenGL] [Error: L] %s\n", message); exit(1); break;
         case GL_DEBUG_SEVERITY_MEDIUM:       logprint("[OpenGL] [Error: M] %s\n", message); exit(1); break;
         case GL_DEBUG_SEVERITY_HIGH:         logprint("[OpenGL] [Error: H] %s\n", message); exit(1); break;
@@ -530,6 +541,45 @@ void draw_string_shadowed(Vector2 position, Vector2 offset, Vector2 scale, Vecto
     draw_string(v2_add(position, offset), scale, bg_color, s);
     draw_string(position,                 scale, fg_color, s);
 }
+
+// todo: cleanup, use glDrawSubArrays() or something?
+void draw_mesh_string(Vector2 position, Vector2 scale, Vector4 color, String s) {
+
+    Matrix2 m = m2_mul(m2_scale(scale), m2_scale((Vector2) {1 / window_info.aspect, 1}));
+
+    u32 shader = asset_shaders.rect;
+    
+    glUseProgram(shader);
+    
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
+    glUniform4fv(glGetUniformLocation(shader, "color"), 1, (f32*) &color);
+    glUniformMatrix2fv(glGetUniformLocation(shader, "transform"), 1, GL_FALSE, (f32*) &m);
+
+    for (int i = 0; i < s.count; i++) {
+    
+        MeshCharacter* mesh = &mesh_alphabet[s.data[i]];
+        Vector2 pos = {position.x + scale.x * i / window_info.aspect, position.y};
+        
+        glBindVertexArray(mesh->vao);
+        glBindBuffer(GL_ARRAY_BUFFER, mesh->vbo);
+        
+        glUniform2fv(glGetUniformLocation(shader, "position"), 1, (f32*) &pos);
+        glDrawArrays(GL_TRIANGLES, 0, mesh->count);
+    }
+
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+}
+
+// todo: cleanup
+void draw_mesh_string_shadowed(Vector2 position, Vector2 offset, Vector2 scale, Vector4 fg_color, Vector4 bg_color, String s) {
+    draw_mesh_string(v2_add(position, offset), scale, bg_color, s);
+    draw_mesh_string(position,                 scale, fg_color, s);
+}
+
 
 
 void draw_axis_arrow(Vector3 scale, Camera* cam) {
@@ -1028,6 +1078,118 @@ void make_geometry_primitives() {
     }
 }
 
+// temp, todo: this looks very slow
+MeshCharacter get_mesh_char(u8 char_to_display) {
+    
+    const int char_w = 6;
+    const int char_h = 6;
+    
+    u8* data;
+    int x;
+    int y;
+    
+    int w;
+    int h;
+    
+    {
+        u8 d = char_to_display - ' ';
+        x = d % 16;
+        y = d / 16;
+    }
+    
+    // switch the x y back (because stb flip it) and get rid of channels, just for convenience, maybe slow
+    {
+        Texture* t = &asset_textures.styxel;
+
+        w = t->w;
+        h = t->h;
+        data = malloc(w * h); 
+
+        u64 acc = 0;
+        for (int i = h - 1; i >= 0; i--) {
+            for (int j = 0; j < w * 4; j += 4) {
+                data[acc] = t->data[i * w * 4 + j];
+                acc++;
+            }
+        }
+    }
+
+    //printf("w %d h %d\n", w, h);
+    
+    u32 total_pixel_count = 0;
+
+    for (int i = y * char_h; i < (y + 1) * char_h; i++) {
+        for (int j = x * char_w; j < (x + 1) * char_w; j++) {
+            //printf("%c", data[i * w + j] ? 'O' : ' ');
+            if (data[i * w + j]) total_pixel_count++;
+        }
+        //printf("\n");
+    }
+    
+    //printf("total pixel count %d\n", total_pixel_count);
+    
+    Vector2* vertices = malloc(sizeof(Vector2) * total_pixel_count * 6);
+    
+    // todo: flip back now, so we can merge this with the flip above
+    u64 acc = 0;
+    for (int i = y * char_h; i < (y + 1) * char_h; i++) {
+        for (int j = x * char_w; j < (x + 1) * char_w; j++) {
+          
+            if (data[i * w + j]) {
+
+                Vector2 p0 = {
+                    ((j + 0) % char_w) / (f32) char_w, 
+                    1 - ((i + 0) % char_h) / (f32) char_h, 
+                };
+
+                Vector2 p3 = {
+                    (j % char_w + 1) / (f32) char_w, 
+                    1 - (i % char_h + 1) / (f32) char_h, 
+                };
+                
+                Vector2 p1 = {p3.x, p0.y};
+                Vector2 p2 = {p0.x, p3.y};
+                
+                vertices[acc + 0] = p2;
+                vertices[acc + 1] = p3;
+                vertices[acc + 2] = p1;
+                vertices[acc + 3] = p2;
+                vertices[acc + 4] = p1;
+                vertices[acc + 5] = p0;
+
+                acc += 6;
+            }
+        }
+    }
+
+    free(data);
+
+    u32 vbo, vao;
+
+    u32 shader = asset_shaders.rect;
+    glUseProgram(shader); 
+    
+    glGenBuffers(     1, &vbo);
+    glGenVertexArrays(1, &vao);
+    
+    u32 count    = total_pixel_count * 6;
+    
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Vector2) * count, (f32*) vertices, GL_DYNAMIC_DRAW);
+
+    glBindVertexArray(vao);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(f32), (void*) 0);
+    glEnableVertexAttribArray(0);
+
+    return (MeshCharacter) {
+        .vao      = vao,
+        .vbo      = vbo,
+        .vertices = vertices,
+        .count    = count,
+    };
+}
+
+
 
 // todo: only handle RGBA now
 Texture load_texture(char* path, int channel) {
@@ -1245,7 +1407,7 @@ void setup(int arg_count, char** args) {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         
-        // glfwWindowHint(GLFW_SAMPLES, 8); // anti-aliasing
+        // glfwWindowHint(GLFW_SAMPLES, 8); // quick permanent anti-aliasing, switch to shader-based later
 
         // set window and load OpenGL functions
         w->handle = glfwCreateWindow(w->width, w->height, "Engine", NULL, NULL);
@@ -1319,6 +1481,11 @@ void setup(int arg_count, char** args) {
         }
 
         make_geometry_primitives();
+        
+        // make mesh font alphabet
+        for (u8 c = ' '; c <= '~'; c++) {
+            mesh_alphabet[c] = get_mesh_char(c);
+        }
         
         load_position(&camera);
     }
