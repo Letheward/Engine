@@ -142,6 +142,8 @@ typedef struct {
     u32 axis;
     
     u32 font;
+    u32 quad;
+
     u32 light;
 
 } Asset_Shaders;
@@ -174,6 +176,14 @@ typedef struct {
     u32      vao;
     u32      vbo;
 } MeshCharacter;
+
+typedef struct {
+    Vector2* vertices; // vertex buffer which contains all the character data
+    u32      vao;
+    u32      vbo;
+    u32      char_start_indices[256];
+    u32      char_index_counts [256];
+} MeshAlphabet;
 
 
 
@@ -215,7 +225,6 @@ Camera camera = {
 
 
 Vector3 light; // temp
-
 
 
 
@@ -282,7 +291,7 @@ void GL_print_debug_message(
     const void*   user_param
 ) {
     switch (severity) {
-        //case GL_DEBUG_SEVERITY_NOTIFICATION: logprint("[OpenGL] [Note] %s\n"    , message); break; // disabled because mesh font spam this too much, which slow down startup time
+        case GL_DEBUG_SEVERITY_NOTIFICATION: logprint("[OpenGL] [Note] %s\n"    , message); break; // disabled because mesh font spam this too much, which slow down startup time
         case GL_DEBUG_SEVERITY_LOW:          logprint("[OpenGL] [Error: L] %s\n", message); exit(1); break;
         case GL_DEBUG_SEVERITY_MEDIUM:       logprint("[OpenGL] [Error: M] %s\n", message); exit(1); break;
         case GL_DEBUG_SEVERITY_HIGH:         logprint("[OpenGL] [Error: H] %s\n", message); exit(1); break;
@@ -516,7 +525,7 @@ void draw_string(Vector2 position, Vector2 scale, Vector4 color, String s) {
     glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m);
     glUniform4fv(glGetUniformLocation(mesh->id.shader, "color"), 1, (f32*) &color);
    
-    for (int i = 0; i < s.count; i++) {
+    for (u64 i = 0; i < s.count; i++) {
     
         u8 c = s.data[i];
 
@@ -558,7 +567,7 @@ void draw_mesh_string(Vector2 position, Vector2 scale, Vector4 color, String s) 
     glUniform4fv(glGetUniformLocation(shader, "color"), 1, (f32*) &color);
     glUniformMatrix2fv(glGetUniformLocation(shader, "transform"), 1, GL_FALSE, (f32*) &m);
 
-    for (int i = 0; i < s.count; i++) {
+    for (u64 i = 0; i < s.count; i++) {
     
         MeshCharacter* mesh = &mesh_alphabet[s.data[i]];
         Vector2 pos = {position.x + scale.x * i / window_info.aspect, position.y};
@@ -763,12 +772,12 @@ void make_geometry_primitives() {
         Vertex* vertices = malloc(sizeof(Vertex) * vertex_count); 
         u32*    indices  = malloc(sizeof(u32)    * index_count); 
 
-        for (int i = 0; i < vertex_count; i++) {
+        for (u32 i = 0; i < vertex_count; i++) {
             f32 rad  = TAU * i / (f32) edges;
             vertices[i].pos = (Vector2) {cosf(rad), sinf(rad)};
         }
 
-        for (int i = 0; i < edges - 1; i++) {
+        for (u32 i = 0; i < edges - 1; i++) {
             indices[i * 2 + 0] = i;
             indices[i * 2 + 1] = i + 1;
         }
@@ -799,12 +808,12 @@ void make_geometry_primitives() {
         Vertex* vertices = malloc(sizeof(Vertex) * vertex_count); 
         u32*    indices  = malloc(sizeof(u32)    * index_count);
 
-        for (int i = 1; i < vertex_count; i++) {
+        for (u32 i = 1; i < vertex_count; i++) {
             f32 rad = TAU * i / (f32) edges;
             vertices[i].pos = (Vector2) {cosf(rad), sinf(rad)};
         }
         
-        for (int j = 0; j < edges; j++) {
+        for (u32 j = 0; j < edges; j++) {
             indices[j * 3 + 0] = 0;
             indices[j * 3 + 1] = j + 1;
             indices[j * 3 + 2] = j + 2;
@@ -1078,7 +1087,7 @@ void make_geometry_primitives() {
     }
 }
 
-// temp, todo: this looks very slow
+// temp, todo: clean this up, this is very slow
 MeshCharacter get_mesh_char(u8 char_to_display) {
     
     const int char_w = 6;
@@ -1477,6 +1486,7 @@ void setup(int arg_count, char** args) {
             s->rect = compile_shader("data/shaders/rect.glsl");
             s->axis = compile_shader("data/shaders/axis.glsl");
             s->font = compile_shader("data/shaders/font.glsl");
+            s->quad = compile_shader("data/shaders/quad.glsl");
 
         }
 
@@ -1495,26 +1505,6 @@ void setup(int arg_count, char** args) {
 
 
 
-
-
-/* ---- Experiment: Gravity ---- */
-
-const float G = 0.001;
-
-// janky, get the formula right
-Vector3 get_gravity(CelestialBody a, CelestialBody b) {
-    Vector3 d = v3_sub(b.base.position, a.base.position);
-    float dl  = v3_length(d);
-    return v3_scale(v3_normalize(d), (G * a.mass * b.mass / (dl * dl)));
-}
-
-void update_velocity(CelestialBody* b, Vector3 force, float dt) {
-    b->velocity = v3_add(b->velocity, v3_scale(force, dt / b->mass));
-}
-
-void update_position(CelestialBody* b, float dt) {
-    b->base.position = v3_add(b->base.position, v3_scale(b->velocity, dt));
-}
 
 
 
@@ -1549,7 +1539,6 @@ void process_inputs(f64 dt) {
     if (glfwGetKey(w->handle, GLFW_KEY_S) == GLFW_PRESS) dv.y  = -dt * factor;
     if (glfwGetKey(w->handle, GLFW_KEY_R) == GLFW_PRESS) dv.z  =  dt * factor;
     if (glfwGetKey(w->handle, GLFW_KEY_F) == GLFW_PRESS) dv.z  = -dt * factor;
-
 
     // 3-way free camera
     // if (glfwGetKey(w->handle, GLFW_KEY_Q) == GLFW_PRESS) dr.zx = -TAU * dt * 0.1;
@@ -1594,4 +1583,222 @@ void process_inputs(f64 dt) {
     cam->position    = v3_add(cam->position, v3_rotate(dv, cam->orientation));
     cam->view        = m4_mul(r3d_to_m4(r3d_reverse(cam->orientation)), m4_translate(v3_reverse(cam->position))); // reverse pos and orientation to get world transform
 }
+
+
+
+
+
+
+/* ==== Experiments ==== */
+
+/* ---- Gravity ---- */
+
+const float G = 0.001;
+
+// janky, get the formula right
+Vector3 get_gravity(CelestialBody a, CelestialBody b) {
+    Vector3 d = v3_sub(b.base.position, a.base.position);
+    float dl  = v3_length(d);
+    return v3_scale(v3_normalize(d), (G * a.mass * b.mass / (dl * dl)));
+}
+
+void update_velocity(CelestialBody* b, Vector3 force, float dt) {
+    b->velocity = v3_add(b->velocity, v3_scale(force, dt / b->mass));
+}
+
+void update_position(CelestialBody* b, float dt) {
+    b->base.position = v3_add(b->base.position, v3_scale(b->velocity, dt));
+}
+
+
+
+
+
+/* ---- Using Fonts ---- */
+
+
+/*/
+// temp
+u8 temp_bitmap[512 * 512];
+stbtt_bakedchar char_data[96];
+
+u32 temp_tex_id;
+u32 temp_vao;
+u32 temp_vbo;
+
+
+// temp
+void stb_truetype_test() {
+
+    String roboto = load_file("data/fonts/Roboto-Regular.ttf");
+    
+    stbtt_BakeFontBitmap(roboto.data, 0, 32.0, temp_bitmap, 512, 512, 32, 96, char_data); // no guarantee this fits!
+    
+    glGenTextures(1, &temp_tex_id);
+    glBindTexture(GL_TEXTURE_2D, temp_tex_id);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 512, 512, 0, GL_RED, GL_UNSIGNED_BYTE, temp_bitmap);
+    
+    glGenBuffers(     1, &temp_vbo);
+    glGenVertexArrays(1, &temp_vao);
+
+    f32 vertices[] = {
+        0, 0, 0, 0, 
+        0, 0, 0, 0, 
+        0, 0, 0, 0, 
+        0, 0, 0, 0, 
+        0, 0, 0, 0, 
+        0, 0, 0, 0, 
+    };
+    
+    glBindBuffer(GL_ARRAY_BUFFER, temp_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
+    
+    glBindVertexArray(temp_vao);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(f32), (void*) 0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(f32), (void*) (2 * sizeof(f32)));
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    
+    int w = 512;
+    int h = 512;
+    for (int j = 0; j < h; j++) {
+        for (int i = 0; i < w; i++) {
+            putchar(" .:ioVM@"[temp_bitmap[j * w + i] >> 5]);
+        }
+        putchar('\n');
+    }
+
+}
+
+// temp
+void test_print(Vector2 position, String s) {
+
+    u32 shader = asset_shaders.quad;
+    
+    glUseProgram(shader); 
+    
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
+    glBindTexture(GL_TEXTURE_2D, asset_textures.test.id); //temp_tex_id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i(glGetUniformLocation(shader, "texture0"), 0);
+    
+    
+    for (u64 i = 0; i < s.count; i++) {
+        
+        stbtt_aligned_quad q;
+        stbtt_GetBakedQuad(char_data, 512, 512, s.data[i] - 32, &position.x, &position.y, &q, 1);
+        //printf("%f %f %f %f %f %f %f %f\n", q.x0, q.y0, q.x1, q.y1, q.s0, q.t0, q.s1, q.t1);
+        
+        s32 w = window_info.width;
+        s32 h = window_info.height;
+        
+        //printf("%f %f %f %f\n", q.x0 / w, q.y0 / h, q.x1 / w, q.y1 / h);
+        
+        typedef struct {
+            Vector2 pos;
+            Vector2 uv;
+        } Vertex;
+        
+        Vector2 p0 = {q.x0 / w, q.y0 / h};
+        Vector2 p3 = {q.x1 / w, q.y1 / h};
+        Vector2 p1 = {p3.x, p0.y};
+        Vector2 p2 = {p0.x, p3.y};
+        Vector2 u0 = {q.s0, q.t0};
+        Vector2 u3 = {q.s1, q.t1};
+        Vector2 u1 = {u3.x, u0.y};
+        Vector2 u2 = {u0.x, u3.y};
+        
+        f32 s = 0.5;
+        Vector2 p0 = {0, 0};
+        Vector2 p1 = {s, 0};
+        Vector2 p2 = {s, s};
+        Vector2 p3 = {0, s};
+        
+        Vector2 u0 = {0, 0};
+        Vector2 u1 = {1, 0};
+        Vector2 u2 = {1, 1};
+        Vector2 u3 = {0, 1};
+        
+        Vertex vertices[] = {
+            {p0, u0},
+            {p1, u1},
+            {p2, u2},
+            {p0, u0},
+            {p2, u2},
+            {p3, u3},
+        };
+        
+        glBindVertexArray(temp_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, temp_vbo);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), (f32*) vertices);
+
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+}
+
+   
+// temp
+void draw_quad_init() {
+
+    f32 s = 0.1;
+    f32 vertices[] = {
+        0, 0,
+        0.1, 0,
+        0.1, 0.1,
+
+        0, 0,
+        1, 1,
+        0, 1,
+    };
+
+    u32 shader = asset_shaders.quad;
+    glUseProgram(shader); 
+    
+    glGenBuffers(     1, &temp_vbo);
+    glGenVertexArrays(1, &temp_vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, temp_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
+    
+    glBindVertexArray(temp_vao);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(f32), (void*) 0);
+    glEnableVertexAttribArray(0);
+}
+
+// temp
+void draw_quad_test() {
+
+    u32 shader = asset_shaders.quad;
+    glUseProgram(shader); 
+    
+    f32 s = 0.1;
+    f32 v[] = {
+        0, 0,
+        s, 0,
+        s, s,
+
+        0, 0,
+        1, 1,
+        0, 1,
+    };
+    
+    glBindVertexArray(temp_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, temp_vbo);
+    //glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(v), v);
+
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+}
+
+/*/
+
 

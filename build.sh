@@ -8,7 +8,7 @@ opt="-O0"
 #dbg="-g"
 #con="-mwindows"
 def="-D OS_WINDOWS"
-etc="-std=c99 -Wall -pedantic -static"
+etc="-std=c99 -pedantic -Wall -static"
 
 # build
 gcc $src $obj $fol $lin $opt $dbg $con $def $etc -o bin/$name &&

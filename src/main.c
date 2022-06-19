@@ -38,54 +38,176 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 
 
 
+
+
+
+
+// temp, todo: clean this up, this is very slow
+MeshCharacter get_mesh_char2(u8 char_to_display) {
+    
+    const int char_w = 6;
+    const int char_h = 6;
+    
+    u8* data;
+    
+    int w;
+    int h;
+    
+    // switch the x y back (because stb flip it) and get rid of channels, just for convenience, maybe slow
+    {
+        Texture* t = &asset_textures.styxel;
+
+        w = t->w;
+        h = t->h;
+        data = malloc(w * h); 
+
+        u64 acc = 0;
+        for (int i = h - 1; i >= 0; i--) {
+            for (int j = 0; j < w * 4; j += 4) {
+                printf("%-4d ", t->data[i * w * 4 + j]);
+                data[acc] = t->data[i * w * 4 + j];
+                acc++;
+            }
+                printf("\n");
+        }
+    }
+    
+
+    int x;
+    int y;
+    {
+        u8 d = char_to_display - ' ';
+        x = d % 16;
+        y = d / 16;
+    }
+
+    //printf("w %d h %d\n", w, h);
+    
+    u32 total_pixel_count = 0;
+
+    for (int i = y * char_h; i < (y + 1) * char_h; i++) {
+        for (int j = x * char_w; j < (x + 1) * char_w; j++) {
+            //printf("%c", data[i * w + j] ? 'O' : ' ');
+            if (data[i * w + j]) total_pixel_count++;
+        }
+        //printf("\n");
+    }
+    
+    //printf("total pixel count %d\n", total_pixel_count);
+    
+    Vector2* vertices = malloc(sizeof(Vector2) * total_pixel_count * 6);
+    
+    // todo: flip back now, so we can merge this with the flip above
+    u64 acc = 0;
+    for (int i = y * char_h; i < (y + 1) * char_h; i++) {
+        for (int j = x * char_w; j < (x + 1) * char_w; j++) {
+          
+            if (data[i * w + j]) {
+                
+                /*
+
+                    0 ------ 1
+                    |        |
+                    |        |
+                    2 ------ 3
+              
+                */
+
+                Vector2 p0 = {
+                    ((j + 0) % char_w) / (f32) char_w, 
+                    1 - ((i + 0) % char_h) / (f32) char_h, 
+                };
+
+                Vector2 p3 = {
+                    (j % char_w + 1) / (f32) char_w, 
+                    1 - (i % char_h + 1) / (f32) char_h, 
+                };
+                
+                Vector2 p1 = {p3.x, p0.y};
+                Vector2 p2 = {p0.x, p3.y};
+                
+                vertices[acc + 0] = p2;
+                vertices[acc + 1] = p3;
+                vertices[acc + 2] = p1;
+                vertices[acc + 3] = p2;
+                vertices[acc + 4] = p1;
+                vertices[acc + 5] = p0;
+
+                acc += 6;
+            }
+        }
+    }
+
+    free(data);
+
+    u32 vbo, vao;
+
+    u32 shader = asset_shaders.rect;
+    glUseProgram(shader); 
+    
+    glGenBuffers(     1, &vbo);
+    glGenVertexArrays(1, &vao);
+    
+    u32 count    = total_pixel_count * 6;
+    
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Vector2) * count, (f32*) vertices, GL_DYNAMIC_DRAW);
+
+    glBindVertexArray(vao);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(f32), (void*) 0);
+    glEnableVertexAttribArray(0);
+
+    return (MeshCharacter) {
+        .vao      = vao,
+        .vbo      = vbo,
+        .vertices = vertices,
+        .count    = count,
+    };
+}
+
+MeshCharacter test_char;
+
+
+
+
+// todo: cleanup, use glDrawSubArrays() or something?
+void draw_mesh_char(Vector2 position, Vector2 scale, Vector4 color) {
+
+    Matrix2 m = m2_mul(m2_scale(scale), m2_scale((Vector2) {1 / window_info.aspect, 1}));
+
+    u32 shader = asset_shaders.rect;
+    glUseProgram(shader);
+    
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    MeshCharacter* mesh = &test_char;
+    
+    glUniform4fv(glGetUniformLocation(shader, "color"), 1, (f32*) &color);
+    glUniformMatrix2fv(glGetUniformLocation(shader, "transform"), 1, GL_FALSE, (f32*) &m);
+    glUniform2fv(glGetUniformLocation(shader, "position"), 1, (f32*) &position);
+    
+    glBindVertexArray(mesh->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh->vbo);
+    glDrawArrays(GL_TRIANGLES, 0, mesh->count);
+
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+}
+
+
+
+
+
+
+
+
 int main(int c_arg_count, char** c_args) {
 
     setup(c_arg_count, c_args);
-
-    /*/
-    String roboto_ttf = load_file("data/fonts/Roboto-Regular.ttf");
     
-    stbtt_fontinfo font;
-    stbtt_InitFont(&font, roboto_ttf.data, stbtt_GetFontOffsetForIndex(roboto_ttf.data, 0));
-
-    // for (int j = 0; j < h; j++) {
-    //     for (int i = 0; i < w; i++) {
-    //         putchar(" .:ioVM@"[bitmap[j * w + i] >> 5]);
-    //     }
-    //     putchar('\n');
-    // }
-    
-    // find a simple way to draw a quad
-    u32 my_fid;
-    {
-        int w, h;
-        u8* bitmap = stbtt_GetCodepointBitmap(&font, 0, stbtt_ScaleForPixelHeight(&font, 256), 'A', &w, &h, 0, 0);
-        
-        // todo: use red channel don't work, why????
-        u8* rgba_bitmap = calloc(1, w * h * 4); 
-        for (int j = 0; j < h; j++) {
-            for (int i = 0; i < w; i++) {
-                int x = j * w + i;
-                rgba_bitmap[x * 4] = bitmap[x];
-            }
-        }
-        
-        glGenTextures(1, &my_fid);
-        glBindTexture(GL_TEXTURE_2D, my_fid);
-        glTexImage2D(
-            GL_TEXTURE_2D, 
-            0, 
-            GL_RGBA,
-            w, 
-            h, 
-            0, 
-            GL_RGBA, 
-            GL_UNSIGNED_BYTE, 
-            rgba_bitmap
-        );
-    }
-    /*/
-
+    test_char = get_mesh_char2('A');
 
     GeometryPrimitives* gp = &geometry_primitives;
 
@@ -168,7 +290,6 @@ int main(int c_arg_count, char** c_args) {
     };
 
 
-
     Timer lerp_clock = {0};
     Timer text_pulse = {0};
     Timer fps_clock  = {.interval = 1};
@@ -220,8 +341,12 @@ int main(int c_arg_count, char** c_args) {
 
 
 
+
+
         /* ---- 2D ---- */
 
+        //draw_mesh_char((Vector2) {0, 0}, (Vector2) {0.2, 0.2}, (Vector4) {1, 1, 1, 1});
+        
         {
             Vector2 pos        = lerp_v2((Vector2) {-0.65, 0.7}, (Vector2) {-0.65, 0.72}, sin_normalize(text_pulse.base));
             Vector2 pos2       = v2_add(pos, (Vector2) {0, -0.2});
@@ -241,7 +366,9 @@ int main(int c_arg_count, char** c_args) {
             {
                 Timer* t = &fps_clock;
                 Camera* c = &camera;
-                f64 v = t->counter / t->base / t->interval;
+                f64 v;
+                if (t->base == 0 || t->counter == 0)  v = 60; // temp placeholder, todo: solve this better
+                else                                  v = (t->counter / t->base) / t->interval;
                 
                 char* mode = "(Unknown)";
                 switch (c->draw_mode) {
@@ -260,15 +387,18 @@ int main(int c_arg_count, char** c_args) {
                 if (window_info.is_first_frame) fps.count = 0;
             }
             
-            Vector2 scale      = {0.03, 0.03};
+            f32 font_size   = 6 * 4 / (f32) window_info.height;
+            f32 line_height = 6 * 6 / (f32) window_info.height;
+            
+            Vector2 scale      = {font_size, font_size};
             Vector2 offset     = {scale.x * 0.1, scale.y * -0.1};
             Vector4 color      = V4_UNIT;
             Vector4 color_back = {0, 0, 0, 0.7};
             
-            draw_mesh_string_shadowed((Vector2) {-0.95, 0.9},  offset, scale, color, color_back, fps);
-            draw_mesh_string_shadowed((Vector2) {-0.95, 0.85}, offset, scale, color, color_back, temp_print("Engine   Speed: %f", engine_speed_scale));
-            draw_mesh_string_shadowed((Vector2) {-0.95, 0.8},  offset, scale, color, color_back, temp_print("Movement Speed: %f", movement_speed_scale));
-            draw_mesh_string_shadowed((Vector2) {-0.95, 0.75}, offset, scale, color, color_back, draw_mode);
+            draw_mesh_string_shadowed((Vector2) {-0.95, 0.9                  }, offset, scale, color, color_back, fps);
+            draw_mesh_string_shadowed((Vector2) {-0.95, 0.9 - line_height * 1}, offset, scale, color, color_back, temp_print("Engine   Speed: %f", engine_speed_scale));
+            draw_mesh_string_shadowed((Vector2) {-0.95, 0.9 - line_height * 2}, offset, scale, color, color_back, temp_print("Movement Speed: %f", movement_speed_scale));
+            draw_mesh_string_shadowed((Vector2) {-0.95, 0.9 - line_height * 3}, offset, scale, color, color_back, draw_mode);
 
             draw_axis_arrow((Vector3) {0.05, 0.05, 0.05}, &camera);
 

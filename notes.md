@@ -2,6 +2,8 @@
 
 ## Bugs
 
+- why dynamically changing vertices give bad outputs? (even though data in RenderDoc is correct)
+
 - 3D transparent texture leak problem
 - 2D texture leak problem (in bitmap fonts)
 - if we want to do unity build using `win32_helper.c`, in current header order, something in `windows.h` makes gcc unhappy
