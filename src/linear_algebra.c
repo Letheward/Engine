@@ -135,7 +135,7 @@ Vector3 v3_normalize(Vector3 v) {
 Matrix2 m2_scale(Vector2 v) {
     return (Matrix2) {
         {v.x,   0},
-        {  0, v.y}
+        {  0, v.y},
     };
 }
 
@@ -144,7 +144,7 @@ Matrix2 m2_rotate(f32 rad) {
     f32 s = sinf(rad);
     return (Matrix2) {
         { c,  s},
-        {-s,  c}
+        {-s,  c},
     };
 }
 
@@ -178,7 +178,7 @@ Matrix4 m4_translate(Vector3 v) {
         {  1,   0,   0,   0},
         {  0,   1,   0,   0},
         {  0,   0,   1,   0},
-        {v.x, v.y, v.z,   1}
+        {v.x, v.y, v.z,   1},
     };
 }
 
@@ -204,7 +204,7 @@ Matrix4 m4_perspective(f32 FOV, f32 aspect, f32 n, f32 f) {
         { a / aspect,                      0,  0,  0},
         {          0,      (f + n) / (f - n),  0,  1},
         {          0,                      0,  a,  0},
-        {          0, -2 * (f * n) / (f - n),  0,  0}
+        {          0, -2 * (f * n) / (f - n),  0,  0},
     };
 }
 
@@ -213,7 +213,7 @@ Matrix4 m4_orthogonal(f32 l, f32 r, f32 b, f32 t, f32 n, f32 f) {
         {       2 / (r - l),                   0,                   0,  0},
         {                 0,         2 / (f - n),                   0,  0},
         {                 0,                   0,         2 / (t - b),  0},
-        {-(r + l) / (r - l),  -(f + n) / (f - n),  -(t + b) / (t - b),  1}
+        {-(r + l) / (r - l),  -(f + n) / (f - n),  -(t + b) / (t - b),  1},
     };
 }
 
@@ -277,7 +277,7 @@ Rotor3D r3d_mul(Rotor3D a, Rotor3D b) {
 // R* V R
 Vector3 v3_rotate(Vector3 v, Rotor3D r) {
 
-    // out result, a vector and a trivector
+    // temp result, a vector and a trivector
     f32 x   =  v.x * r.s  - v.y * r.xy + v.z * r.zx;
     f32 y   =  v.y * r.s  - v.z * r.yz + v.x * r.xy;
     f32 z   =  v.z * r.s  - v.x * r.zx + v.y * r.yz;

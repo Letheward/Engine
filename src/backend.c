@@ -59,6 +59,15 @@ typedef struct {
 
 } Texture;
 
+typedef struct {
+    Vector2* vertices; // vertex buffer which contains all the character data
+    u32      vao;
+    u32      vbo;
+    u32      char_start_indices[256]; // character start index
+    u32      char_vertex_counts[256]; // character vertex count
+} MeshAlphabet;
+
+
 
 
 
@@ -136,16 +145,11 @@ typedef struct {
 /* ---- Namespaced Bindings ---- */
 
 typedef struct {
-   
     u32 cube;
     u32 rect;
     u32 axis;
-    
     u32 font;
     u32 quad;
-
-    u32 light;
-
 } Asset_Shaders;
 
 typedef struct {
@@ -169,23 +173,6 @@ typedef struct {
     Mesh tetrahedron;
 } GeometryPrimitives;
 
-// todo: slow!!!
-typedef struct {
-    Vector2* vertices;
-    u32      count;
-    u32      vao;
-    u32      vbo;
-} MeshCharacter;
-
-typedef struct {
-    Vector2* vertices; // vertex buffer which contains all the character data
-    u32      vao;
-    u32      vbo;
-    u32      char_start_indices[256];
-    u32      char_index_counts [256];
-} MeshAlphabet;
-
-
 
 
 
@@ -195,7 +182,7 @@ GeometryPrimitives geometry_primitives;
 Asset_Shaders      asset_shaders;
 Asset_Textures     asset_textures;
 
-MeshCharacter mesh_alphabet[256];    
+MeshAlphabet       mesh_alphabet;
 
 f32 engine_speed_scale   = 1.0;
 f32 movement_speed_scale = 1.0;
@@ -291,7 +278,7 @@ void GL_print_debug_message(
     const void*   user_param
 ) {
     switch (severity) {
-        case GL_DEBUG_SEVERITY_NOTIFICATION: logprint("[OpenGL] [Note] %s\n"    , message); break; // disabled because mesh font spam this too much, which slow down startup time
+        case GL_DEBUG_SEVERITY_NOTIFICATION: logprint("[OpenGL] [Note] %s\n"    , message); break; 
         case GL_DEBUG_SEVERITY_LOW:          logprint("[OpenGL] [Error: L] %s\n", message); exit(1); break;
         case GL_DEBUG_SEVERITY_MEDIUM:       logprint("[OpenGL] [Error: M] %s\n", message); exit(1); break;
         case GL_DEBUG_SEVERITY_HIGH:         logprint("[OpenGL] [Error: H] %s\n", message); exit(1); break;
@@ -413,6 +400,8 @@ void pause_or_continue() {
 
 /* ==== Renderer ==== */
 
+/* ---- 2D ---- */
+
 // todo: what's the better way to do position?
 void draw_rect(Vector2 position, Vector2 scale, Vector4 color) {
     
@@ -440,7 +429,6 @@ void draw_rect(Vector2 position, Vector2 scale, Vector4 color) {
     glEnable(GL_DEPTH_TEST);
 }
 
-// todo: how should we do offset?
 void draw_ring(Vector3 position, Vector2 scale, f32 line_width, Vector4 color) {
     
     Mesh* mesh = &geometry_primitives.ring;
@@ -551,45 +539,51 @@ void draw_string_shadowed(Vector2 position, Vector2 offset, Vector2 scale, Vecto
     draw_string(position,                 scale, fg_color, s);
 }
 
-// todo: cleanup, use glDrawSubArrays() or something?
+// todo: further cleanup, move this to GPU?
 void draw_mesh_string(Vector2 position, Vector2 scale, Vector4 color, String s) {
 
-    Matrix2 m = m2_mul(m2_scale(scale), m2_scale((Vector2) {1 / window_info.aspect, 1}));
+    MeshAlphabet* mesh = &mesh_alphabet;
 
-    u32 shader = asset_shaders.rect;
+    Matrix2 m = m2_mul(m2_scale(scale), m2_scale((Vector2) {1 / window_info.aspect, 1}));
     
+    u32 shader = asset_shaders.rect;
     glUseProgram(shader);
     
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
-    glUniform4fv(glGetUniformLocation(shader, "color"), 1, (f32*) &color);
-    glUniformMatrix2fv(glGetUniformLocation(shader, "transform"), 1, GL_FALSE, (f32*) &m);
-
-    for (u64 i = 0; i < s.count; i++) {
+    glBindVertexArray(mesh->vao);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh->vbo);
     
-        MeshCharacter* mesh = &mesh_alphabet[s.data[i]];
+    glUniform4fv(glGetUniformLocation(shader, "color"),    1, (f32*) &color);
+    glUniformMatrix2fv(glGetUniformLocation(shader, "transform"), 1, GL_FALSE, (f32*) &m);
+    
+    for (u64 i = 0; i < s.count; i++) {
+        
         Vector2 pos = {position.x + scale.x * i / window_info.aspect, position.y};
         
-        glBindVertexArray(mesh->vao);
-        glBindBuffer(GL_ARRAY_BUFFER, mesh->vbo);
-        
+        u8 c = s.data[i];
+        u32 c_start = mesh->char_start_indices[c];
+        u32 c_count = mesh->char_vertex_counts[c];
+           
         glUniform2fv(glGetUniformLocation(shader, "position"), 1, (f32*) &pos);
-        glDrawArrays(GL_TRIANGLES, 0, mesh->count);
+        glDrawArrays(GL_TRIANGLES, c_start, c_count);
     }
 
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
 }
 
-// todo: cleanup
 void draw_mesh_string_shadowed(Vector2 position, Vector2 offset, Vector2 scale, Vector4 fg_color, Vector4 bg_color, String s) {
     draw_mesh_string(v2_add(position, offset), scale, bg_color, s);
     draw_mesh_string(position,                 scale, fg_color, s);
 }
 
 
+
+
+/* ---- 3D ---- */
 
 void draw_axis_arrow(Vector3 scale, Camera* cam) {
 
@@ -652,6 +646,248 @@ void draw_model(Model3D* model, int count, Camera* cam) {
 
 
 /* ==== Resource Loading ==== */
+
+// todo: can only handle RGBA now
+Texture load_texture(char* path, int channel) {
+
+    Texture t; 
+    
+    t.data    = stbi_load(path, &t.w, &t.h, NULL, channel);
+    t.channel = channel;
+    if (!t.data) error("[Texture] Cannot load %s\n", path);
+
+    glGenTextures(1, &t.id);
+    glBindTexture(GL_TEXTURE_2D, t.id);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, t.w, t.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, t.data);
+    
+    logprint("[Texture] Loaded %s\n", path);
+
+    return t;
+}
+
+void unload_texture(Texture* t) {
+    stbi_image_free(t->data);
+    free(t);
+}
+
+u32 compile_shader(char* path) {
+           
+    typedef struct {
+        char* tag;
+        u32   type;
+    } TypeTag;
+
+    const TypeTag tags[] = {
+        {"[vert]", GL_VERTEX_SHADER},
+        {"[frag]", GL_FRAGMENT_SHADER},
+        {"[geom]", GL_GEOMETRY_SHADER},
+        {"[comp]", GL_COMPUTE_SHADER},
+        {"[eval]", GL_TESS_EVALUATION_SHADER},
+        {"[ctrl]", GL_TESS_CONTROL_SHADER},
+    };
+
+    u32 shader = glCreateProgram();
+
+    void* (*old_alloc)(u64) = runtime.alloc;
+    runtime.alloc = temp_alloc;
+    char* code = load_file_as_c_string(path);
+    runtime.alloc = old_alloc;
+ 
+    if (!code) return 0;
+
+    char* ps[6];
+    for (int i = 0; i < 6; i++) ps[i] = strstr(code, tags[i].tag); // find the tags
+    for (int i = 0; i < 6; i++) {
+        if (ps[i]) {
+            *ps[i] = '\0'; // "cut" the string (works for now, maybe no need to switch to String)
+            ps[i] += 8;    // get string starting point without tag
+        }
+    }
+
+    for (int i = 0; i < 6; i++) {
+
+        if (ps[i]) {
+
+            u32 id = glCreateShader(tags[i].type);
+            int success;
+            int length;
+
+            glShaderSource(id, 1, (const char**) &ps[i], NULL);
+            glCompileShader(id);
+            glGetShaderiv(id, GL_COMPILE_STATUS, &success);
+            glGetShaderiv(id, GL_INFO_LOG_LENGTH, &length);
+
+            if (!success) {
+                char* message = temp_alloc(length);
+                glGetShaderInfoLog(id, length, &length, message);
+                error("[GLSL] In tag %s of %s: %s", tags[i].tag, path, message);
+                return 0;
+            }
+
+            glAttachShader(shader, id);
+            glDeleteShader(id); // maybe pointless, since it will only be deleted when detached
+        }
+    }
+
+    glLinkProgram(shader);
+    glValidateProgram(shader);
+
+    logprint("[GLSL] Compiled %s\n", path);
+
+    return shader;
+}
+
+void save_position() {
+    logprint("[Save] Position Saved.\n");
+    save_file(data_string(camera), "data/save/game.pos");
+}
+
+void load_position(Camera* cam) {
+
+    char* path = "data/save/game.pos"; 
+    FILE* f = fopen(path, "rb");
+    if (!f) goto fail;  
+
+    u8* data;
+    u64 count;
+
+    fseek(f, 0, SEEK_END);
+    count = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    if (!count || count != sizeof(Camera)) goto fail;
+
+    data = temp_alloc(count);
+    fread(data, 1, count, f);
+    fclose(f);
+
+    *cam = *(Camera*) data;
+    logprint("[Save] Position loaded.\n");
+    return;
+
+    fail:
+    logprint("[Save] [Warning] Cannot Load position, use default.\n");
+}
+
+// todo: further cleanup, handle sprites not in ASCII range, move this to GPU?
+void fill_mesh_alphabet(MeshAlphabet* mesh, Texture* tex, int char_w, int char_h) {
+
+    const u8  flipped      = 1;
+    const int char_per_row = 16;
+    
+    u8* data; // helper texture, y is downwards
+    int w;
+    int h;
+    
+    // switch the x y back (because stb flip it) and get rid of channels, just for convenience, maybe slow
+    // todo: handle not flipped case
+    if (flipped) { 
+
+        w = tex->w;
+        h = tex->h;
+        data = malloc(w * h); 
+
+        u64 acc = 0;
+        for (int i = h - 1; i >= 0; i--) {
+            for (int j = 0; j < w * 4; j += 4) {
+                data[acc] = tex->data[i * w * 4 + j];
+                acc++;
+            }
+        }
+    }
+
+    u64 total_vertex_count = 0;
+    for (u8 c = ' '; c <= '~'; c++) {
+        
+        u8 d = c - ' '; // difference
+
+        // coordinate for current character
+        int x = (d % char_per_row) * char_w;
+        int y = (d / char_per_row) * char_h;
+        
+        u32 vertex_count = 0;
+        for (int i = y; i < y + char_h; i++) {
+            for (int j = x; j < x + char_w; j++) {
+                if (data[i * w + j]) vertex_count += 6;
+            }
+        }
+
+        mesh->char_vertex_counts[c] = vertex_count;        
+        mesh->char_start_indices[c] = total_vertex_count;        
+
+        total_vertex_count  += vertex_count;
+    }
+   
+    Vector2* vertices = malloc(sizeof(Vector2) * total_vertex_count);
+    
+    u64 acc = 0;
+    for (u8 c = ' '; c <= '~'; c++) {
+        
+        u8 d = c - ' '; // difference
+
+        // coordinate for current character
+        int x = (d % char_per_row) * char_w;
+        int y = (d / char_per_row) * char_h;
+        
+        // todo: this flip back the coordinate, so we can merge with the flip above?
+        for (int i = y; i < y + char_h; i++) {
+            for (int j = x; j < x + char_w; j++) {
+              
+                if (data[i * w + j]) {
+                     
+                    /*
+                        0 ------ 1
+                        |        |
+                        |        |
+                        2 ------ 3
+                    */
+                   
+                    Vector2 p0 = {
+                        ((j + 0) % char_w)     / (f32) char_w, 
+                        1 - ((i + 0) % char_h) / (f32) char_h, 
+                    };
+
+                    Vector2 p3 = {
+                        (j % char_w + 1)     / (f32) char_w, 
+                        1 - (i % char_h + 1) / (f32) char_h, 
+                    };
+                    
+                    Vector2 p1 = {p3.x, p0.y};
+                    Vector2 p2 = {p0.x, p3.y};
+                    
+                    vertices[acc + 0] = p2;
+                    vertices[acc + 1] = p3;
+                    vertices[acc + 2] = p1;
+                    vertices[acc + 3] = p2;
+                    vertices[acc + 4] = p1;
+                    vertices[acc + 5] = p0;
+                    
+                    acc += 6;
+                }
+            }
+        }
+    }
+    
+    free(data);
+
+    u32 shader = asset_shaders.rect;
+    glUseProgram(shader); 
+    
+    u32 vbo, vao;
+    glGenBuffers(     1, &vbo);
+    glGenVertexArrays(1, &vao);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Vector2) * total_vertex_count, (f32*) vertices, GL_DYNAMIC_DRAW);
+
+    glBindVertexArray(vao);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(f32), (void*) 0);
+    glEnableVertexAttribArray(0);
+
+    mesh->vertices = vertices;
+    mesh->vao      = vao;
+    mesh->vbo      = vbo;
+}
 
 #define make_mesh_from_stack_data(mesh, v, i, va, Vertex_Type, shader, texture) make_mesh(mesh, (f32*) v, i, va, length_of(v), length_of(i), length_of(va), sizeof(Vertex_Type), shader, texture, 1)
 void make_mesh(
@@ -1087,243 +1323,6 @@ void make_geometry_primitives() {
     }
 }
 
-// temp, todo: clean this up, this is very slow
-MeshCharacter get_mesh_char(u8 char_to_display) {
-    
-    const int char_w = 6;
-    const int char_h = 6;
-    
-    u8* data;
-    int x;
-    int y;
-    
-    int w;
-    int h;
-    
-    {
-        u8 d = char_to_display - ' ';
-        x = d % 16;
-        y = d / 16;
-    }
-    
-    // switch the x y back (because stb flip it) and get rid of channels, just for convenience, maybe slow
-    {
-        Texture* t = &asset_textures.styxel;
-
-        w = t->w;
-        h = t->h;
-        data = malloc(w * h); 
-
-        u64 acc = 0;
-        for (int i = h - 1; i >= 0; i--) {
-            for (int j = 0; j < w * 4; j += 4) {
-                data[acc] = t->data[i * w * 4 + j];
-                acc++;
-            }
-        }
-    }
-
-    //printf("w %d h %d\n", w, h);
-    
-    u32 total_pixel_count = 0;
-
-    for (int i = y * char_h; i < (y + 1) * char_h; i++) {
-        for (int j = x * char_w; j < (x + 1) * char_w; j++) {
-            //printf("%c", data[i * w + j] ? 'O' : ' ');
-            if (data[i * w + j]) total_pixel_count++;
-        }
-        //printf("\n");
-    }
-    
-    //printf("total pixel count %d\n", total_pixel_count);
-    
-    Vector2* vertices = malloc(sizeof(Vector2) * total_pixel_count * 6);
-    
-    // todo: flip back now, so we can merge this with the flip above
-    u64 acc = 0;
-    for (int i = y * char_h; i < (y + 1) * char_h; i++) {
-        for (int j = x * char_w; j < (x + 1) * char_w; j++) {
-          
-            if (data[i * w + j]) {
-
-                Vector2 p0 = {
-                    ((j + 0) % char_w) / (f32) char_w, 
-                    1 - ((i + 0) % char_h) / (f32) char_h, 
-                };
-
-                Vector2 p3 = {
-                    (j % char_w + 1) / (f32) char_w, 
-                    1 - (i % char_h + 1) / (f32) char_h, 
-                };
-                
-                Vector2 p1 = {p3.x, p0.y};
-                Vector2 p2 = {p0.x, p3.y};
-                
-                vertices[acc + 0] = p2;
-                vertices[acc + 1] = p3;
-                vertices[acc + 2] = p1;
-                vertices[acc + 3] = p2;
-                vertices[acc + 4] = p1;
-                vertices[acc + 5] = p0;
-
-                acc += 6;
-            }
-        }
-    }
-
-    free(data);
-
-    u32 vbo, vao;
-
-    u32 shader = asset_shaders.rect;
-    glUseProgram(shader); 
-    
-    glGenBuffers(     1, &vbo);
-    glGenVertexArrays(1, &vao);
-    
-    u32 count    = total_pixel_count * 6;
-    
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(Vector2) * count, (f32*) vertices, GL_DYNAMIC_DRAW);
-
-    glBindVertexArray(vao);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(f32), (void*) 0);
-    glEnableVertexAttribArray(0);
-
-    return (MeshCharacter) {
-        .vao      = vao,
-        .vbo      = vbo,
-        .vertices = vertices,
-        .count    = count,
-    };
-}
-
-
-
-// todo: only handle RGBA now
-Texture load_texture(char* path, int channel) {
-
-    Texture t; 
-    
-    t.data    = stbi_load(path, &t.w, &t.h, NULL, channel);
-    t.channel = channel;
-    if (!t.data) error("[Texture] Cannot load %s\n", path);
-
-    glGenTextures(1, &t.id);
-    glBindTexture(GL_TEXTURE_2D, t.id);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, t.w, t.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, t.data);
-    
-    logprint("[Texture] Loaded %s\n", path);
-
-    return t;
-}
-
-void unload_texture(Texture* t) {
-    stbi_image_free(t->data);
-    free(t);
-}
-
-
-u32 compile_shader(char* path) {
-           
-    typedef struct {
-        char* tag;
-        u32   type;
-    } TypeTag;
-
-    const TypeTag tags[] = {
-        {"[vert]", GL_VERTEX_SHADER},
-        {"[frag]", GL_FRAGMENT_SHADER},
-        {"[geom]", GL_GEOMETRY_SHADER},
-        {"[comp]", GL_COMPUTE_SHADER},
-        {"[eval]", GL_TESS_EVALUATION_SHADER},
-        {"[ctrl]", GL_TESS_CONTROL_SHADER},
-    };
-
-    u32 shader = glCreateProgram();
-
-    void* (*old_alloc)(u64) = runtime.alloc;
-    runtime.alloc = temp_alloc;
-    char* code = load_file_as_c_string(path);
-    runtime.alloc = old_alloc;
- 
-    if (!code) return 0;
-
-    char* ps[6];
-    for (int i = 0; i < 6; i++) ps[i] = strstr(code, tags[i].tag); // find the tags
-    for (int i = 0; i < 6; i++) {
-        if (ps[i]) {
-            *ps[i] = '\0'; // "cut" the string (works for now, maybe no need to switch to String)
-            ps[i] += 8;    // get string starting point without tag
-        }
-    }
-
-    for (int i = 0; i < 6; i++) {
-
-        if (ps[i]) {
-
-            u32 id = glCreateShader(tags[i].type);
-            int success;
-            int length;
-
-            glShaderSource(id, 1, (const char**) &ps[i], NULL);
-            glCompileShader(id);
-            glGetShaderiv(id, GL_COMPILE_STATUS, &success);
-            glGetShaderiv(id, GL_INFO_LOG_LENGTH, &length);
-
-            if (!success) {
-                char* message = temp_alloc(length);
-                glGetShaderInfoLog(id, length, &length, message);
-                error("[GLSL] In tag %s of %s: %s", tags[i].tag, path, message);
-                return 0;
-            }
-
-            glAttachShader(shader, id);
-            glDeleteShader(id); // maybe pointless, since it will only be deleted when detached
-        }
-    }
-
-    glLinkProgram(shader);
-    glValidateProgram(shader);
-
-    logprint("[GLSL] Compiled %s\n", path);
-
-    return shader;
-}
-
-void save_position() {
-    logprint("[Save] Position Saved.\n");
-    save_file(data_string(camera), "data/save/game.pos");
-}
-
-void load_position(Camera* cam) {
-
-    char* path = "data/save/game.pos"; 
-    FILE* f = fopen(path, "rb");
-    if (!f) goto fail;  
-
-    u8* data;
-    u64 count;
-
-    fseek(f, 0, SEEK_END);
-    count = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    if (!count || count != sizeof(Camera)) goto fail;
-
-    data = temp_alloc(count);
-    fread(data, 1, count, f);
-    fclose(f);
-
-    *cam = *(Camera*) data;
-    logprint("[Save] Position loaded.\n");
-    return;
-
-    fail:
-    logprint("[Save] [Warning] Cannot Load position, use default.\n");
-}
-
-
 
 
 
@@ -1404,7 +1403,6 @@ void setup(int arg_count, char** args) {
    
 
     /* ---- Init Window and OpenGL ---- */
-
     {
         WindowInfo* w = &window_info;
         setvbuf(stdout, NULL, _IONBF, 0); // force mitty to print immediately
@@ -1443,7 +1441,6 @@ void setup(int arg_count, char** args) {
 
 
     /* ---- Setup Debug (comment out to disable) ---- */
-
     {
         glEnable(GL_DEBUG_OUTPUT);
         glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
@@ -1462,8 +1459,8 @@ void setup(int arg_count, char** args) {
 
 
     /* ---- Load Resources ---- */
-
     {
+
         // Load All Textures 
         {
             Asset_Textures* t = &asset_textures;
@@ -1487,23 +1484,17 @@ void setup(int arg_count, char** args) {
             s->axis = compile_shader("data/shaders/axis.glsl");
             s->font = compile_shader("data/shaders/font.glsl");
             s->quad = compile_shader("data/shaders/quad.glsl");
-
         }
-
-        make_geometry_primitives();
         
-        // make mesh font alphabet
-        for (u8 c = ' '; c <= '~'; c++) {
-            mesh_alphabet[c] = get_mesh_char(c);
+        // Load Meshes 
+        {
+            make_geometry_primitives();
+            fill_mesh_alphabet(&mesh_alphabet, &asset_textures.styxel, 6, 6);
         }
         
         load_position(&camera);
     }
 }
-
-
-
-
 
 
 

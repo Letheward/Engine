@@ -39,175 +39,9 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 
 
 
-
-
-
-// temp, todo: clean this up, this is very slow
-MeshCharacter get_mesh_char2(u8 char_to_display) {
-    
-    const int char_w = 6;
-    const int char_h = 6;
-    
-    u8* data;
-    
-    int w;
-    int h;
-    
-    // switch the x y back (because stb flip it) and get rid of channels, just for convenience, maybe slow
-    {
-        Texture* t = &asset_textures.styxel;
-
-        w = t->w;
-        h = t->h;
-        data = malloc(w * h); 
-
-        u64 acc = 0;
-        for (int i = h - 1; i >= 0; i--) {
-            for (int j = 0; j < w * 4; j += 4) {
-                printf("%-4d ", t->data[i * w * 4 + j]);
-                data[acc] = t->data[i * w * 4 + j];
-                acc++;
-            }
-                printf("\n");
-        }
-    }
-    
-
-    int x;
-    int y;
-    {
-        u8 d = char_to_display - ' ';
-        x = d % 16;
-        y = d / 16;
-    }
-
-    //printf("w %d h %d\n", w, h);
-    
-    u32 total_pixel_count = 0;
-
-    for (int i = y * char_h; i < (y + 1) * char_h; i++) {
-        for (int j = x * char_w; j < (x + 1) * char_w; j++) {
-            //printf("%c", data[i * w + j] ? 'O' : ' ');
-            if (data[i * w + j]) total_pixel_count++;
-        }
-        //printf("\n");
-    }
-    
-    //printf("total pixel count %d\n", total_pixel_count);
-    
-    Vector2* vertices = malloc(sizeof(Vector2) * total_pixel_count * 6);
-    
-    // todo: flip back now, so we can merge this with the flip above
-    u64 acc = 0;
-    for (int i = y * char_h; i < (y + 1) * char_h; i++) {
-        for (int j = x * char_w; j < (x + 1) * char_w; j++) {
-          
-            if (data[i * w + j]) {
-                
-                /*
-
-                    0 ------ 1
-                    |        |
-                    |        |
-                    2 ------ 3
-              
-                */
-
-                Vector2 p0 = {
-                    ((j + 0) % char_w) / (f32) char_w, 
-                    1 - ((i + 0) % char_h) / (f32) char_h, 
-                };
-
-                Vector2 p3 = {
-                    (j % char_w + 1) / (f32) char_w, 
-                    1 - (i % char_h + 1) / (f32) char_h, 
-                };
-                
-                Vector2 p1 = {p3.x, p0.y};
-                Vector2 p2 = {p0.x, p3.y};
-                
-                vertices[acc + 0] = p2;
-                vertices[acc + 1] = p3;
-                vertices[acc + 2] = p1;
-                vertices[acc + 3] = p2;
-                vertices[acc + 4] = p1;
-                vertices[acc + 5] = p0;
-
-                acc += 6;
-            }
-        }
-    }
-
-    free(data);
-
-    u32 vbo, vao;
-
-    u32 shader = asset_shaders.rect;
-    glUseProgram(shader); 
-    
-    glGenBuffers(     1, &vbo);
-    glGenVertexArrays(1, &vao);
-    
-    u32 count    = total_pixel_count * 6;
-    
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(Vector2) * count, (f32*) vertices, GL_DYNAMIC_DRAW);
-
-    glBindVertexArray(vao);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(f32), (void*) 0);
-    glEnableVertexAttribArray(0);
-
-    return (MeshCharacter) {
-        .vao      = vao,
-        .vbo      = vbo,
-        .vertices = vertices,
-        .count    = count,
-    };
-}
-
-MeshCharacter test_char;
-
-
-
-
-// todo: cleanup, use glDrawSubArrays() or something?
-void draw_mesh_char(Vector2 position, Vector2 scale, Vector4 color) {
-
-    Matrix2 m = m2_mul(m2_scale(scale), m2_scale((Vector2) {1 / window_info.aspect, 1}));
-
-    u32 shader = asset_shaders.rect;
-    glUseProgram(shader);
-    
-    glDisable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    MeshCharacter* mesh = &test_char;
-    
-    glUniform4fv(glGetUniformLocation(shader, "color"), 1, (f32*) &color);
-    glUniformMatrix2fv(glGetUniformLocation(shader, "transform"), 1, GL_FALSE, (f32*) &m);
-    glUniform2fv(glGetUniformLocation(shader, "position"), 1, (f32*) &position);
-    
-    glBindVertexArray(mesh->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh->vbo);
-    glDrawArrays(GL_TRIANGLES, 0, mesh->count);
-
-    glDisable(GL_BLEND);
-    glEnable(GL_DEPTH_TEST);
-}
-
-
-
-
-
-
-
-
 int main(int c_arg_count, char** c_args) {
 
     setup(c_arg_count, c_args);
-    
-    test_char = get_mesh_char2('A');
 
     GeometryPrimitives* gp = &geometry_primitives;
 
@@ -340,13 +174,8 @@ int main(int c_arg_count, char** c_args) {
         draw_model(&object3, 1, &camera);
 
 
-
-
-
         /* ---- 2D ---- */
 
-        //draw_mesh_char((Vector2) {0, 0}, (Vector2) {0.2, 0.2}, (Vector4) {1, 1, 1, 1});
-        
         {
             Vector2 pos        = lerp_v2((Vector2) {-0.65, 0.7}, (Vector2) {-0.65, 0.72}, sin_normalize(text_pulse.base));
             Vector2 pos2       = v2_add(pos, (Vector2) {0, -0.2});
@@ -410,7 +239,9 @@ int main(int c_arg_count, char** c_args) {
         }
 
 
-        // end frame
+
+        /* ==== End Frame ==== */ 
+
         temp_reset();
         
         if (glfwWindowShouldClose(window_info.handle)) break;
