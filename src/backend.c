@@ -60,11 +60,17 @@ typedef struct {
 } Texture;
 
 typedef struct {
+    
     Vector2* vertices; // vertex buffer which contains all the character data
+    
+    struct {
+        u32 start; // character start index
+        u32 count; // character vertex count
+    } indices[256];
+    
     u32      vao;
     u32      vbo;
-    u32      char_start_indices[256]; // character start index
-    u32      char_vertex_counts[256]; // character vertex count
+
 } MeshAlphabet;
 
 
@@ -593,8 +599,8 @@ void draw_mesh_string(Vector2 position, Vector2 scale, Vector4 color, String s) 
         Vector2 pos = {position.x + scale.x * rx / window_info.aspect, position.y};
         rx += 1.0;
         
-        u32 c_start = mesh->char_start_indices[c];
-        u32 c_count = mesh->char_vertex_counts[c];
+        u32 c_start = mesh->indices[c].start;
+        u32 c_count = mesh->indices[c].count;
            
         glUniform2fv(glGetUniformLocation(shader, "position"), 1, (f32*) &pos);
         glDrawArrays(GL_TRIANGLES, c_start, c_count);
@@ -840,9 +846,9 @@ void fill_mesh_alphabet(MeshAlphabet* mesh, Texture* tex, s32 char_w, s32 char_h
                 if (data[i * w + j]) vertex_count += 6;
             }
         }
-
-        mesh->char_vertex_counts[c] = vertex_count;        
-        mesh->char_start_indices[c] = total_vertex_count;        
+        
+        mesh->indices[c].start = total_vertex_count;
+        mesh->indices[c].count = vertex_count;
 
         total_vertex_count  += vertex_count;
     }
