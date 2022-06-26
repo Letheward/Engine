@@ -5,16 +5,16 @@ typedef struct {
     GLFWwindow* handle;
     char* title;
 
-    int width;
-    int height;
+    s32 width;
+    s32 height;
     f32 aspect;
 
     // prev position for toggle fullscreen
     struct {
-        int x;
-        int y;
-        int w;
-        int h;
+        s32 x;
+        s32 y;
+        s32 w;
+        s32 h;
     } pos;
 
     struct {
@@ -51,9 +51,9 @@ typedef struct {
 typedef struct {
 
     u8* data;
-    int w;
-    int h;
-    int channel;
+    s32 w;
+    s32 h;
+    s32 channel;
 
     u32 id;
 
@@ -118,14 +118,14 @@ typedef struct {
     f32     xy;
     
     // FOV
-    f32     FOV;         // we may want f32, this is just for convenience
+    f32     FOV;         
     f32     near;
     f32     far;
 
     Matrix4 view;        // output of position & rotation
     Matrix4 projection;  // output of FOV, near, far
 
-    int     draw_mode;   // temp, maybe remove this
+    s32     draw_mode;   // temp, maybe remove this
 
 } Camera;
 
@@ -310,7 +310,7 @@ void update_camera_projection(Camera* cam) {
     cam->projection = m4_perspective(cam->FOV * TAU / 360, window_info.aspect, cam->near, cam->far);
 }
 
-void resize_framebuffer(GLFWwindow* window, int width, int height) {
+void resize_framebuffer(GLFWwindow* window, s32 width, s32 height) {
     WindowInfo* w = &window_info;
     glViewport(0, 0, width, height);
     w->width  = width;
@@ -365,7 +365,7 @@ void toggle_fullscreen() {
     }
 }
 
-void change_draw_mode(int d) {
+void change_draw_mode(s32 d) {
     Camera* c = &camera;
     c->draw_mode += d;
     clamp_s32(&c->draw_mode, GL_POINTS, GL_TRIANGLE_FAN);
@@ -513,16 +513,32 @@ void draw_string(Vector2 position, Vector2 scale, Vector4 color, String s) {
     glUniformMatrix2fv(glGetUniformLocation(mesh->id.shader, "transform"), 1, GL_FALSE, (f32*) &m);
     glUniform4fv(glGetUniformLocation(mesh->id.shader, "color"), 1, (f32*) &color);
    
+    f32 rx = 0; // for newline 
     for (u64 i = 0; i < s.count; i++) {
     
         u8 c = s.data[i];
+        switch (c) {
+            
+            case '\t': {  
+                rx += 4.0;
+                continue;
+            }
+            
+            case '\r': continue;
+            case '\n': { 
+                position.y -= scale.y;
+                rx = 0;
+                continue;
+            } 
+        }
 
-        int o = 16 * 1;
-        int row = (c - o) % 16;
-        int col = 6 - (c - o) / 16;
+        s32 o = 16 * 1;
+        s32 row = (c - o) % 16;
+        s32 col = 6 - (c - o) / 16;
         
         Vector2 offset = {row / 16.0, col / 6.0};
-        Vector2 pos_offset = {position.x + scale.x * i / window_info.aspect, position.y};
+        Vector2 pos_offset = {position.x + scale.x * rx / window_info.aspect, position.y};
+        rx += 1.0;
 
         glUniform2fv(glGetUniformLocation(mesh->id.shader, "position"), 1, (f32*) &pos_offset);
         glUniform2fv(glGetUniformLocation(mesh->id.shader, "offset"), 1, (f32*) &offset);
@@ -559,11 +575,28 @@ void draw_mesh_string(Vector2 position, Vector2 scale, Vector4 color, String s) 
     glUniform4fv(glGetUniformLocation(shader, "color"),    1, (f32*) &color);
     glUniformMatrix2fv(glGetUniformLocation(shader, "transform"), 1, GL_FALSE, (f32*) &m);
     
+    f32 rx = 0; // for newline 
     for (u64 i = 0; i < s.count; i++) {
         
-        Vector2 pos = {position.x + scale.x * i / window_info.aspect, position.y};
-        
         u8 c = s.data[i];
+        switch (c) {
+            
+            case '\t': {  
+                rx += 4.0;
+                continue;
+            }
+            
+            case '\r': continue;
+            case '\n': { 
+                position.y -= scale.y;
+                rx = 0;
+                continue;
+            } 
+        }
+        
+        Vector2 pos = {position.x + scale.x * rx / window_info.aspect, position.y};
+        rx += 1.0;
+        
         u32 c_start = mesh->char_start_indices[c];
         u32 c_count = mesh->char_vertex_counts[c];
            
@@ -611,7 +644,7 @@ void draw_axis_arrow(Vector3 scale, Camera* cam) {
 }
 
 // todo: how to handle other shaders? how to get light?
-void draw_model(Model3D* model, int count, Camera* cam) {
+void draw_model(Model3D* model, s32 count, Camera* cam) {
     
     Mesh* mesh = model->mesh; 
 
@@ -632,7 +665,7 @@ void draw_model(Model3D* model, int count, Camera* cam) {
     glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "view"), 1, GL_FALSE, (f32*) &cam->view);
     glUniform3fv(glGetUniformLocation(mesh->id.shader, "light_pos"), 1, (f32*) &light);
     
-    for (int i = 0; i < count; i++) {
+    for (s32 i = 0; i < count; i++) {
         Matrix4 m = entity_to_m4(model[i].base);
         glUniformMatrix4fv(glGetUniformLocation(mesh->id.shader, "model"), 1, GL_FALSE, (f32*) &m);
         glDrawElements(cam->draw_mode, mesh->index_count, GL_UNSIGNED_INT, NULL);
@@ -648,7 +681,7 @@ void draw_model(Model3D* model, int count, Camera* cam) {
 /* ==== Resource Loading ==== */
 
 // todo: can only handle RGBA now
-Texture load_texture(char* path, int channel) {
+Texture load_texture(char* path, s32 channel) {
 
     Texture t; 
     
@@ -696,21 +729,21 @@ u32 compile_shader(char* path) {
     if (!code) return 0;
 
     char* ps[6];
-    for (int i = 0; i < 6; i++) ps[i] = strstr(code, tags[i].tag); // find the tags
-    for (int i = 0; i < 6; i++) {
+    for (s32 i = 0; i < 6; i++) ps[i] = strstr(code, tags[i].tag); // find the tags
+    for (s32 i = 0; i < 6; i++) {
         if (ps[i]) {
             *ps[i] = '\0'; // "cut" the string (works for now, maybe no need to switch to String)
             ps[i] += 8;    // get string starting point without tag
         }
     }
 
-    for (int i = 0; i < 6; i++) {
+    for (s32 i = 0; i < 6; i++) {
 
         if (ps[i]) {
 
             u32 id = glCreateShader(tags[i].type);
-            int success;
-            int length;
+            s32 success;
+            s32 length;
 
             glShaderSource(id, 1, (const char**) &ps[i], NULL);
             glCompileShader(id);
@@ -770,14 +803,14 @@ void load_position(Camera* cam) {
 }
 
 // todo: further cleanup, handle sprites not in ASCII range, move this to GPU?
-void fill_mesh_alphabet(MeshAlphabet* mesh, Texture* tex, int char_w, int char_h) {
+void fill_mesh_alphabet(MeshAlphabet* mesh, Texture* tex, s32 char_w, s32 char_h) {
 
     const u8  flipped      = 1;
-    const int char_per_row = 16;
+    const s32 char_per_row = 16;
     
     u8* data; // helper texture, y is downwards
-    int w;
-    int h;
+    s32 w;
+    s32 h;
     
     // switch the x y back (because stb flip it) and get rid of channels, just for convenience, maybe slow
     // todo: handle not flipped case
@@ -788,8 +821,8 @@ void fill_mesh_alphabet(MeshAlphabet* mesh, Texture* tex, int char_w, int char_h
         data = malloc(w * h); 
 
         u64 acc = 0;
-        for (int i = h - 1; i >= 0; i--) {
-            for (int j = 0; j < w * 4; j += 4) {
+        for (s32 i = h - 1; i >= 0; i--) {
+            for (s32 j = 0; j < w * 4; j += 4) {
                 data[acc] = tex->data[i * w * 4 + j];
                 acc++;
             }
@@ -802,12 +835,12 @@ void fill_mesh_alphabet(MeshAlphabet* mesh, Texture* tex, int char_w, int char_h
         u8 d = c - ' '; // difference
 
         // coordinate for current character
-        int x = (d % char_per_row) * char_w;
-        int y = (d / char_per_row) * char_h;
+        s32 x = (d % char_per_row) * char_w;
+        s32 y = (d / char_per_row) * char_h;
         
         u32 vertex_count = 0;
-        for (int i = y; i < y + char_h; i++) {
-            for (int j = x; j < x + char_w; j++) {
+        for (s32 i = y; i < y + char_h; i++) {
+            for (s32 j = x; j < x + char_w; j++) {
                 if (data[i * w + j]) vertex_count += 6;
             }
         }
@@ -826,12 +859,12 @@ void fill_mesh_alphabet(MeshAlphabet* mesh, Texture* tex, int char_w, int char_h
         u8 d = c - ' '; // difference
 
         // coordinate for current character
-        int x = (d % char_per_row) * char_w;
-        int y = (d / char_per_row) * char_h;
+        s32 x = (d % char_per_row) * char_w;
+        s32 y = (d / char_per_row) * char_h;
         
         // todo: this flip back the coordinate, so we can merge with the flip above?
-        for (int i = y; i < y + char_h; i++) {
-            for (int j = x; j < x + char_w; j++) {
+        for (s32 i = y; i < y + char_h; i++) {
+            for (s32 j = x; j < x + char_w; j++) {
               
                 if (data[i * w + j]) {
                      
@@ -1329,7 +1362,7 @@ void make_geometry_primitives() {
 
 /* ==== Input ==== */
 
-void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mods) {
 
     if (action == GLFW_PRESS) {
         switch (key) {
@@ -1359,7 +1392,7 @@ void scroll_callback(GLFWwindow* window, f64 dx, f64 dy) {
     update_camera_projection(&camera);
 }
 
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+void mouse_button_callback(GLFWwindow* window, s32 button, s32 action, s32 mods) {
     if (action == GLFW_PRESS) {
         switch (button) {
             case GLFW_MOUSE_BUTTON_MIDDLE: {
@@ -1378,7 +1411,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
 /* ==== Setup ==== */
 
-void setup(int arg_count, char** args) {
+void setup(s32 arg_count, char** args) {
 
 
     /* ---- Setup Runtime ---- */
@@ -1394,7 +1427,7 @@ void setup(int arg_count, char** args) {
             .count = arg_count,
         };
 
-        for (int i = 0; i < arg_count; i++) {
+        for (s32 i = 0; i < arg_count; i++) {
             String* s = &runtime.command_line_args.data[i];
             s->data  = (u8*) args[i];
             s->count = strlen(args[i]);
@@ -1650,10 +1683,10 @@ void stb_truetype_test() {
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     
-    int w = 512;
-    int h = 512;
-    for (int j = 0; j < h; j++) {
-        for (int i = 0; i < w; i++) {
+    s32 w = 512;
+    s32 h = 512;
+    for (s32 j = 0; j < h; j++) {
+        for (s32 i = 0; i < w; i++) {
             putchar(" .:ioVM@"[temp_bitmap[j * w + i] >> 5]);
         }
         putchar('\n');

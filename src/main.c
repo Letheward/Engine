@@ -26,7 +26,7 @@
 #include "layer/win32.c"
 
 // On Windows, these stupid global variables force laptops to use dedicated GPU
-__declspec(dllexport) int NvOptimusEnablement                  = 0x00000001;
+__declspec(dllexport) int NvOptimusEnablement                  = 1;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 #endif
 
@@ -178,14 +178,12 @@ int main(int c_arg_count, char** c_args) {
 
         {
             Vector2 pos        = lerp_v2((Vector2) {-0.65, 0.7}, (Vector2) {-0.65, 0.72}, sin_normalize(text_pulse.base));
-            Vector2 pos2       = v2_add(pos, (Vector2) {0, -0.2});
             Vector2 scale      = {0.1, 0.1}; 
             Vector2 offset     = {0.005, -0.007};
             Vector4 color      = lerp_v4((Vector4) {0.5, 0.7, 0.95, 1}, (Vector4) {0.2, 0.8, 0.45, 1}, sin_normalize(text_pulse.base));
             Vector4 color_back = {0, 0, 0, 0.7}; 
 
-            draw_mesh_string_shadowed(pos , offset, scale, color, color_back, string("WASD to move, QE to roll"));
-            draw_mesh_string_shadowed(pos2, offset, scale, color, color_back, string("ESC to exit"));
+            draw_mesh_string_shadowed(pos , offset, scale, color, color_back, string("WASD to move, QE to roll\nESC to exit"));
         }
         
         if (window_info.show_debug_info) {
