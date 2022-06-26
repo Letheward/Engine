@@ -518,12 +518,10 @@ void draw_string(Vector2 position, Vector2 scale, Vector4 color, String s) {
     
         u8 c = s.data[i];
         switch (c) {
-            
             case '\t': {  
                 rx += 4.0;
                 continue;
             }
-            
             case '\r': continue;
             case '\n': { 
                 position.y -= scale.y;
@@ -580,12 +578,10 @@ void draw_mesh_string(Vector2 position, Vector2 scale, Vector4 color, String s) 
         
         u8 c = s.data[i];
         switch (c) {
-            
             case '\t': {  
                 rx += 4.0;
                 continue;
             }
-            
             case '\r': continue;
             case '\n': { 
                 position.y -= scale.y;

@@ -183,7 +183,7 @@ int main(int c_arg_count, char** c_args) {
             Vector4 color      = lerp_v4((Vector4) {0.5, 0.7, 0.95, 1}, (Vector4) {0.2, 0.8, 0.45, 1}, sin_normalize(text_pulse.base));
             Vector4 color_back = {0, 0, 0, 0.7}; 
 
-            draw_mesh_string_shadowed(pos , offset, scale, color, color_back, string("WASD to move, QE to roll\nESC to exit"));
+            draw_mesh_string_shadowed(pos, offset, scale, color, color_back, string("WASD to move, QE to roll\nESC to exit"));
         }
         
         if (window_info.show_debug_info) {
