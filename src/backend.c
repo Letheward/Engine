@@ -234,6 +234,14 @@ void clamp_f32(f32* x, f32 low, f32 high) {
     if (*x > high) *x = high;
 }
 
+// implement S_1(x): 3x^2 - 2x^3 (0 <= x <= 1)
+f32 smoothstep(f32 x, f32 low, f32 high) {
+    if (x < low)  return 0;
+    if (x > high) return 1;
+    x = (x - low) / (high - low);
+    return x * x * (3 - 2 * x);
+}
+
 
 
 
@@ -262,7 +270,7 @@ void GL_clear_errors() {
 // legacy debug functions, use print_OpenGL_debug_message() to get better result
 void GL_check_errors() {
     switch (glGetError()) {
-        case GL_NO_ERROR:                                                                                   break;
+        case GL_NO_ERROR:                                                                                     break;
         case GL_INVALID_ENUM:                  logprint("[OpenGL] [Error] Invalid enum\n");                   break;
         case GL_INVALID_VALUE:                 logprint("[OpenGL] [Error] Invalid value\n");                  break;
         case GL_INVALID_OPERATION:             logprint("[OpenGL] [Error] Invalid operation\n");              break;
@@ -418,7 +426,7 @@ void draw_rect(Vector2 position, Vector2 scale, Vector4 color) {
     
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_DST_ALPHA);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glUseProgram(mesh->id.shader); 
     glBindVertexArray(mesh->id.vertex_array);
