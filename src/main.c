@@ -23,11 +23,13 @@
 
 // todo: linux and mac
 #ifdef OS_WINDOWS
+
 #include "layer/win32.c"
 
 // On Windows, these stupid global variables force laptops to use dedicated GPU
 __declspec(dllexport) int NvOptimusEnablement                  = 1;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+
 #endif
 
 #include "runtime.c"
@@ -124,11 +126,11 @@ int main(int c_arg_count, char** c_args) {
     };
 
 
-    Timer lerp_clock = {0};
-    Timer text_pulse = {0};
-    Timer fps_clock  = {.interval = 1};
+    Timer object_pulse = {0};
+    Timer text_pulse   = {0};
+    Timer fps_clock    = {.interval = 1};
 
-    f64 time_now = glfwGetTime();
+    time_now = glfwGetTime();
 
 
     // main loop
@@ -148,15 +150,14 @@ int main(int c_arg_count, char** c_args) {
         /* ==== Simulate ==== */ 
         {
             process_inputs(dt);
-            f64 scaled_dt    = dt * engine_speed_scale;
-            lerp_clock.base += scaled_dt;
-            text_pulse.base += dt * 6;
+            object_pulse.base += dt * engine_speed_scale;
+            text_pulse  .base += dt * 6;
             
-            f32 lerp_value          = sin_normalize(lerp_clock.base);
-            object.base.orientation = nlerp_r3d(R3D_DEFAULT, r3d_from_plane_angle(B3_XY, TAU * 0.25), lerp_value);
-            object.base.position    = lerp_v3((Vector3) {0, 0, -5}, (Vector3) {0, 0, -3}, lerp_value);
+            f32 t = sin_normalize(object_pulse.base);
+            object.base.orientation = nlerp_r3d(R3D_DEFAULT, r3d_from_plane_angle(B3_XY, TAU * 0.25), t);
+            object.base.position    = lerp_v3((Vector3) {0, 0, -5}, (Vector3) {0, 0, -3}, t);
             
-            light = (Vector3) {cos(lerp_clock.base) * 20, sin(lerp_clock.base) * 20, 0};
+            light = (Vector3) {cos(object_pulse.base) * 20, sin(object_pulse.base) * 20, 0};
         }
 
 

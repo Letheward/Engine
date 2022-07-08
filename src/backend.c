@@ -21,14 +21,13 @@ typedef struct {
         f64 x;
         f64 y;
     } cursor;
-
     
-    // options and states
+    // options and states, todo: move these out?
     u8 vsync;
-    u8 cursor_visible;
     u8 fullscreen;
-    u8 is_first_frame;
+    u8 cursor_visible;
     u8 show_debug_info;
+    u8 is_first_frame;
 
 } WindowInfo;
 
@@ -105,14 +104,6 @@ typedef struct {
     Mesh*    mesh;
 } Model3D;
 
-// Experiment: Gravity
-typedef struct {
-    Entity3D base;
-    Vector3  velocity;
-    f32      mass;
-    Mesh*    mesh;
-} CelestialBody;
-
 typedef struct {
     
     Vector3 position;
@@ -124,22 +115,16 @@ typedef struct {
     f32     xy;
     
     // FOV
-    f32     FOV;         
+    f32     FOV;         // maybe use radians?         
     f32     near;
     f32     far;
 
     Matrix4 view;        // output of position & rotation
     Matrix4 projection;  // output of FOV, near, far
 
-    s32     draw_mode;   // temp, maybe remove this
+    s32     draw_mode;   // for debug, maybe remove this
 
 } Camera;
-
-
-
-
-
-
 
 
 
@@ -190,8 +175,10 @@ Asset_Textures     asset_textures;
 
 MeshAlphabet       mesh_alphabet;
 
+f64 time_now             = 0;
 f32 engine_speed_scale   = 1.0;
 f32 movement_speed_scale = 1.0;
+f32 mouse_speed          = 0.002;
 
 WindowInfo window_info = {
     .width            = 1280,
@@ -224,14 +211,16 @@ Vector3 light; // temp
 
 /* ==== Utilities ==== */
 
-void clamp_s32(s32* x, s32 low, s32 high) {
-    if (*x < low ) *x = low;
-    if (*x > high) *x = high;
+s32 clamp_s32(s32 x, s32 low, s32 high) {
+    if (x < low ) return low;
+    if (x > high) return high;
+    return x;
 }
 
-void clamp_f32(f32* x, f32 low, f32 high) {
-    if (*x < low ) *x = low;
-    if (*x > high) *x = high;
+f32 clamp_f32(f32 x, f32 low, f32 high) {
+    if (x < low ) return low;
+    if (x > high) return high;
+    return x;
 }
 
 // implement S_1(x): 3x^2 - 2x^3 (0 <= x <= 1)
@@ -381,8 +370,7 @@ void toggle_fullscreen() {
 
 void change_draw_mode(s32 d) {
     Camera* c = &camera;
-    c->draw_mode += d;
-    clamp_s32(&c->draw_mode, GL_POINTS, GL_TRIANGLE_FAN);
+    c->draw_mode = clamp_s32(c->draw_mode + d, GL_POINTS, GL_TRIANGLE_FAN);
     switch (c->draw_mode) {
         case GL_POINTS:         logprint("[OpenGL] Draw Mode: GL_POINTS\n"        ); break;
         case GL_LINES:          logprint("[OpenGL] Draw Mode: GL_LINES\n"         ); break;
@@ -1397,8 +1385,7 @@ void key_callback(GLFWwindow* window, s32 key, s32 scancode, s32 action, s32 mod
 }
 
 void scroll_callback(GLFWwindow* window, f64 dx, f64 dy) {
-    camera.FOV += dy;
-    clamp_f32(&camera.FOV, 1, 179);
+    camera.FOV = clamp_f32(camera.FOV + dy, 1, 179);
     update_camera_projection(&camera);
 }
 
@@ -1589,16 +1576,10 @@ void process_inputs(f64 dt) {
         update_camera_projection(&camera);
         // dr = (Rotor3D) {1, 0, 0, 0}; // 3-way free camera
     } else {
-
         if (glfwGetKey(w->handle, GLFW_KEY_Q) == GLFW_PRESS) cam->zx += -TAU * dt * 0.3;
         if (glfwGetKey(w->handle, GLFW_KEY_E) == GLFW_PRESS) cam->zx +=  TAU * dt * 0.3;
-
-        cam->yz -= mdy * 0.003;
-        cam->xy -= mdx * 0.003;
-
-        clamp_f32(&cam->yz, -0.22 * TAU, 0.22 * TAU);
-        while (cam->xy >  TAU) cam->xy -= TAU;
-        while (cam->xy < -TAU) cam->xy += TAU;
+        cam->yz = clamp_f32(cam->yz - mdy * mouse_speed, -0.22 * TAU, 0.22 * TAU);
+        cam->xy = fmod(     cam->xy - mdx * mouse_speed, TAU);
     }
 
     // 3-way free camera, todo: understand this. reverse order here (first delta then prev orientation), 
@@ -1626,6 +1607,13 @@ void process_inputs(f64 dt) {
 /* ==== Experiments ==== */
 
 /* ---- Gravity ---- */
+
+typedef struct {
+    Entity3D base;
+    Vector3  velocity;
+    f32      mass;
+    Mesh*    mesh;
+} CelestialBody;
 
 const float G = 0.001;
 
