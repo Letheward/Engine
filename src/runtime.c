@@ -124,6 +124,7 @@ void error(char* s, ...) {
     va_start(va, s);
     fprintf(runtime.log_file, "[Error] ");
     vfprintf(runtime.log_file, s, va);
+    va_end(va);
     exit(1); 
 }
 
@@ -198,13 +199,17 @@ void print(String s) {
 
 String temp_print(char* s, ...) {
     
-    va_list va;
+    va_list va, va2;
     va_start(va, s);
+    va_copy(va2, va);
     
     u64 count  = vsnprintf(0, 0, s, va);
     String out = {temp_alloc(count + 1), count};
-    vsnprintf((char*) out.data, count + 1, s, va);
+    vsnprintf((char*) out.data, count + 1, s, va2);
 
+    va_end(va);
+    va_end(va2);
+    
     return out;
 }
 
